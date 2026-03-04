@@ -380,6 +380,79 @@
             background: rgba(255, 107, 107, 0.3);
         }
 
+        /* Mode Selector */
+        .mode-selector {
+            background: rgba(88, 166, 255, 0.1);
+            border: 2px solid rgba(88, 166, 255, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .mode-selector h3 {
+            color: #58a6ff;
+            margin-bottom: 0.75rem;
+        }
+
+        .mode-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 0.75rem;
+        }
+
+        .mode-btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.cloud {
+            background: #58a6ff;
+            border: none;
+            color: white;
+        }
+
+        .mode-btn.demo {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+        }
+
+        .api-key-section {
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .api-key-section input {
+            padding: 0.5rem 1rem;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: white;
+            font-size: 0.9rem;
+            width: 300px;
+            margin-right: 0.5rem;
+        }
+
+        .api-key-section button {
+            padding: 0.5rem 1rem;
+            background: #238636;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .api-key-section a {
+            color: #58a6ff;
+        }
+
         /* Gallery */
         .gallery {
             display: grid;
@@ -584,6 +657,25 @@
             <div class="panel">
                 <h2>✨ Create Your Image</h2>
                 
+                <!-- Mode Selector -->
+                <div class="mode-selector">
+                    <h3>🔧 Choose Generation Mode</h3>
+                    <div class="mode-buttons">
+                        <button class="mode-btn cloud" id="cloudModeBtn">☁️ Cloud AI (Real Stable Diffusion)</button>
+                        <button class="mode-btn demo" id="demoModeBtn">🎨 Demo Mode (Procedural)</button>
+                    </div>
+                    <p id="modeDescription" style="color: #888; font-size: 0.85rem; margin-bottom: 0.75rem;">
+                        <strong>Cloud AI:</strong> Real Stable Diffusion XL via Hugging Face API. High quality images!
+                    </p>
+                    <div class="api-key-section" id="apiKeySection">
+                        <input type="password" id="hfApiKey" placeholder="Enter Hugging Face API key (free)">
+                        <button id="saveApiKeyBtn">Save Key</button>
+                        <p style="color: #888; font-size: 0.75rem; margin-top: 0.5rem;">
+                            Get your free API key at: <a href="https://huggingface.co/settings/tokens" target="_blank">huggingface.co/settings/tokens</a>
+                        </p>
+                    </div>
+                </div>
+
                 <div class="prompt-section">
                     <label style="display: block; margin-bottom: 0.5rem; color: #aaa;">
                         Describe what you want to see:
@@ -674,11 +766,11 @@
                 <div class="model-info">
                     <h4>📦 Model Information</h4>
                     <ul>
-                        <li><strong>Model:</strong> Stable Diffusion v1.5 (quantized)</li>
-                        <li><strong>Size:</strong> ~2GB (downloaded once, then cached)</li>
-                        <li><strong>Runtime:</strong> WebGPU + WebNN</li>
-                        <li><strong>Privacy:</strong> All processing happens locally</li>
-                        <li><strong>Browser:</strong> Chrome 113+ or Edge 113+</li>
+                        <li><strong>Cloud AI:</strong> Stable Diffusion XL Base 1.0 via Hugging Face API</li>
+                        <li><strong>Quality:</strong> High-resolution 512x512 to 768x768</li>
+                        <li><strong>Privacy:</strong> API key stored locally, images generated in cloud</li>
+                        <li><strong>Free Tier:</strong> ~100-500 images/day with free API key</li>
+                        <li><strong>Works on:</strong> All devices (iOS, Android, Mac, PC)</li>
                     </ul>
                 </div>
             </div>
@@ -764,17 +856,17 @@
     </div>
 
     <script type="module">
-        // Note: Full Stable Diffusion requires large model weights (~2GB)
-        // This demo uses a procedural generation fallback that creates
-        // AI-like abstract art based on your prompt.
-        // For full SD, check: https://github.com/mlc-ai/web-stable-diffusion
+        // Note: This demo supports multiple modes:
+        // 1. Cloud AI (Recommended) - Real Stable Diffusion via Hugging Face API
+        // 2. Demo Mode - Procedural generation for testing
         
-        let sdEngine = null;
         let isGenerating = false;
         let generatedImages = [];
         let currentSeed = -1;
         let startTime = 0;
         let stepStartTime = 0;
+        let aiMode = 'cloud'; // 'cloud' or 'demo'
+        let hfApiKey = localStorage.getItem('hfApiKey') || '';
 
         // DOM Elements
         const promptInput = document.getElementById('promptInput');
@@ -824,38 +916,124 @@
 
         let activeStyle = '';
 
-        // Initialize - show loading briefly then ready
-        async function initStableDiffusion() {
-            // Simulate loading for demo
-            const stages = [
-                { progress: 0.2, text: 'Initializing WebGPU...' },
-                { progress: 0.5, text: 'Loading models...' },
-                { progress: 0.8, text: 'Preparing pipeline...' },
-                { progress: 1.0, text: 'Ready!' }
-            ];
-            
-            for (const stage of stages) {
-                updateLoadingProgress({ progress: stage.progress, text: stage.text });
-                await new Promise(r => setTimeout(r, 300));
+        // Mode selector elements
+        const cloudModeBtn = document.getElementById('cloudModeBtn');
+        const demoModeBtn = document.getElementById('demoModeBtn');
+        const modeDescription = document.getElementById('modeDescription');
+        const apiKeySection = document.getElementById('apiKeySection');
+        const hfApiKeyInput = document.getElementById('hfApiKey');
+        const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+
+        // Initialize
+        function initStableDiffusion() {
+            // Check if API key is set
+            if (hfApiKey) {
+                hfApiKeyInput.value = hfApiKey;
             }
-            
-            // Create procedural engine
-            sdEngine = createProceduralEngine();
+            setMode('cloud');
             hideLoading();
         }
 
-        // Load script dynamically
-        function loadScript(src) {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = src;
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
+        // Set mode
+        function setMode(mode) {
+            aiMode = mode;
+            
+            if (mode === 'cloud') {
+                cloudModeBtn.classList.add('cloud');
+                cloudModeBtn.classList.remove('demo');
+                demoModeBtn.classList.remove('cloud');
+                demoModeBtn.classList.add('demo');
+                modeDescription.innerHTML = '<strong>Cloud AI:</strong> Real Stable Diffusion XL via Hugging Face API. High quality images!';
+                apiKeySection.style.display = hfApiKey ? 'none' : 'block';
+            } else {
+                demoModeBtn.classList.add('cloud');
+                demoModeBtn.classList.remove('demo');
+                cloudModeBtn.classList.remove('cloud');
+                cloudModeBtn.classList.add('demo');
+                modeDescription.innerHTML = '<strong>Demo Mode:</strong> Procedural generation for testing. No API key required.';
+                apiKeySection.style.display = 'none';
+            }
         }
 
-        // Update loading progress
+        // Generate image via Hugging Face API
+        async function generateImageCloudAI(prompt, negativePrompt, options) {
+            if (!hfApiKey) {
+                throw new Error('No API key set. Please enter your Hugging Face API key.');
+            }
+
+            const { width, height, onProgress } = options;
+            const ctx = outputCanvas.getContext('2d');
+            
+            outputCanvas.width = width;
+            outputCanvas.height = height;
+            
+            // Use Stable Diffusion XL via Hugging Face API
+            const response = await fetch('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${hfApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    inputs: prompt,
+                    parameters: {
+                        negative_prompt: negativePrompt,
+                        width: width,
+                        height: height,
+                        guidance_scale: 7.5,
+                        num_inference_steps: 20
+                    }
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'API request failed');
+            }
+            
+            // Get image blob
+            const blob = await response.blob();
+            const img = await createImageBitmap(blob);
+            
+            // Simulate progress (API doesn't provide step-by-step)
+            for (let step = 1; step <= 20; step++) {
+                await new Promise(r => setTimeout(r, 100));
+                ctx.drawImage(img, 0, 0, width, height);
+                if (onProgress) {
+                    onProgress({ step, total: 20, progress: step / 20 });
+                }
+            }
+            
+            return { success: true };
+        }
+
+        // Generate image in demo mode (procedural)
+        async function generateImageDemo(prompt, negativePrompt, options) {
+            const { width, height, steps, onProgress } = options;
+            const ctx = outputCanvas.getContext('2d');
+            
+            outputCanvas.width = width;
+            outputCanvas.height = height;
+            
+            const hash = hashString(prompt);
+            const colors = generateColorsFromPrompt(prompt, hash);
+            
+            for (let step = 0; step < steps; step++) {
+                stepStartTime = performance.now();
+                const progress = (step + 1) / steps;
+                const imageData = generateArtisticImage(width, height, hash, step, steps, colors, prompt);
+                ctx.putImageData(imageData, 0, 0);
+                
+                if (onProgress) {
+                    onProgress({ step: step + 1, total: steps, progress });
+                }
+                
+                await new Promise(r => setTimeout(r, 50));
+            }
+            
+            return { success: true };
+        }
+
         function updateLoadingProgress(progress) {
             const percent = Math.round(progress.progress * 100);
             loadingProgress.textContent = percent + '%';
@@ -1123,7 +1301,7 @@
             generateBtn.disabled = true;
             generateBtn.classList.add('generating');
             document.querySelector('.btn-text').textContent = 'Generating...';
-            
+
             // Get settings
             const steps = parseInt(stepsSlider.value);
             const guidance = parseFloat(guidanceSlider.value);
@@ -1134,39 +1312,47 @@
                 seed = Math.floor(Math.random() * 2147483647);
             }
             currentSeed = seed;
-            const scheduler = schedulerSelect.value;
             const negativePrompt = negativeInput.value.trim();
-            
+
             // Apply style
             const fullPrompt = prompt + (activeStyle || '');
-            
+
             // Show progress
             progressSection.style.display = 'block';
             statsBar.style.display = 'block';
             diffusionViz.style.display = 'grid';
             placeholder.style.display = 'none';
-            
+
             // Setup step indicator
             setupStepIndicator(steps);
-            
+
             // Setup diffusion visualization
             setupDiffusionViz();
-            
+
             startTime = performance.now();
-            
+
             try {
-                await sdEngine.generate(fullPrompt, negativePrompt, {
-                    width,
-                    height,
-                    steps,
-                    guidance,
-                    seed,
-                    scheduler,
-                    onProgress: (progress) => {
-                        updateProgress(progress);
-                    }
-                });
-                
+                if (aiMode === 'cloud') {
+                    // Use Cloud AI (Real Stable Diffusion)
+                    await generateImageCloudAI(fullPrompt, negativePrompt, {
+                        width,
+                        height,
+                        onProgress: (progress) => {
+                            updateProgress(progress);
+                        }
+                    });
+                } else {
+                    // Use Demo mode (procedural)
+                    await generateImageDemo(fullPrompt, negativePrompt, {
+                        width,
+                        height,
+                        steps,
+                        onProgress: (progress) => {
+                            updateProgress(progress);
+                        }
+                    });
+                }
+
                 // Add to gallery
                 addToGallery();
                 
@@ -1409,6 +1595,26 @@
         // Log to stats
         function logToStats(message, type = 'info') {
             console.log(`[${type}] ${message}`);
+        }
+
+        // Mode selector
+        cloudModeBtn.addEventListener('click', () => setMode('cloud'));
+        demoModeBtn.addEventListener('click', () => setMode('demo'));
+
+        // API key save
+        saveApiKeyBtn.addEventListener('click', () => {
+            const key = hfApiKeyInput.value.trim();
+            if (key) {
+                hfApiKey = key;
+                localStorage.setItem('hfApiKey', key);
+                alert('API key saved! You can now use Cloud AI mode with real Stable Diffusion.');
+                setMode('cloud');
+            }
+        });
+
+        // Load saved API key
+        if (hfApiKey) {
+            hfApiKeyInput.value = hfApiKey;
         }
 
         // Initialize on load
