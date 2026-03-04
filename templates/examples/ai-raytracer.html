@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Ray Tracer - WebGPU Demo</title>
+    <link rel="stylesheet" href="../../static/css/style.css">
+    <style>
+        .demo-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .demo-container h1 {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1000px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel h3 {
+            color: #00d9ff;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #raytracerCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        #webcamVideo {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 160px;
+            height: 120px;
+            border-radius: 8px;
+            border: 2px solid rgba(0, 217, 255, 0.5);
+            transform: scaleX(-1);
+        }
+
+        #webcamOverlay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 160px;
+            height: 120px;
+            transform: scaleX(-1);
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .control-group label {
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            accent-color: #00d9ff;
+        }
+
+        .control-group select {
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(0, 217, 255, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .btn.danger {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff4444;
+            border: 1px solid #ff4444;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            color: #00ff88;
+            font-family: monospace;
+        }
+
+        .ai-panel {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            min-height: 100px;
+        }
+
+        .ai-description {
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #ccc;
+        }
+
+        .ai-description strong {
+            color: #00d9ff;
+        }
+
+        .detected-objects {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .object-tag {
+            padding: 0.25rem 0.75rem;
+            background: rgba(0, 217, 255, 0.2);
+            border: 1px solid rgba(0, 217, 255, 0.4);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: #00d9ff;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(0, 217, 255, 0.2);
+            border-top-color: #00d9ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 1rem;
+            color: #00d9ff;
+            font-size: 0.9rem;
+        }
+
+        .scene-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .scene-info h4 {
+            color: #00d9ff;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .scene-info ul {
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-left: 1rem;
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <a href="../../index.html" class="back-link">← Back to Overview</a>
+        
+        <h1>🤖 AI-Powered Ray Tracer</h1>
+        <p style="text-align: center; color: #aaa; margin-bottom: 2rem;">
+            Computer vision detects objects → LLM describes scene → WebGPU ray traces in real-time
+        </p>
+
+        <div class="main-layout">
+            <div class="panel">
+                <h3>🎬 Ray Traced Output</h3>
+                <div class="canvas-container">
+                    <canvas id="raytracerCanvas" width="512" height="288"></canvas>
+                    <video id="webcamVideo" autoplay playsinline muted></video>
+                    <canvas id="webcamOverlay" width="160" height="120"></canvas>
+                    <div class="loading-overlay" id="loadingOverlay">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text" id="loadingText">Initializing WebGPU...</div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">FPS</div>
+                        <div class="stat-value" id="fpsStat">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Rays</div>
+                        <div class="stat-value" id="raysStat">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Objects</div>
+                        <div class="stat-value" id="objectsStat">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Bounces</div>
+                        <div class="stat-value" id="bouncesStat">3</div>
+                    </div>
+                </div>
+
+                <div class="controls-grid">
+                    <div class="control-group">
+                        <label>Ray Bounces: <span id="bouncesValue">3</span></label>
+                        <input type="range" id="bouncesSlider" min="1" max="6" value="3">
+                    </div>
+                    <div class="control-group">
+                        <label>Resolution Scale</label>
+                        <select id="resolutionSelect">
+                            <option value="0.5">Low (256x144)</option>
+                            <option value="1" selected>Medium (512x288)</option>
+                            <option value="2">High (1024x576)</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Scene Type</label>
+                        <select id="sceneSelect">
+                            <option value="ai">AI Generated (from webcam)</option>
+                            <option value="cornell">Cornell Box</option>
+                            <option value="spheres">Random Spheres</option>
+                            <option value="materials">Material Showcase</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>AI Update Rate</label>
+                        <select id="aiRateSelect">
+                            <option value="1000">Fast (1s)</option>
+                            <option value="3000" selected>Normal (3s)</option>
+                            <option value="5000">Slow (5s)</option>
+                            <option value="0">Manual</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn" id="startWebcamBtn">📷 Start Webcam</button>
+                    <button class="btn secondary" id="analyzeBtn">🔍 Analyze Scene</button>
+                    <button class="btn secondary" id="regenerateBtn">🎲 Regenerate Scene</button>
+                    <button class="btn danger" id="stopBtn">⏹️ Stop</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>🧠 AI Analysis</h3>
+                <div class="ai-panel">
+                    <div id="aiDescription" class="ai-description">
+                        <p>Start the webcam and click "Analyze Scene" to detect objects and generate a ray traced scene powered by AI.</p>
+                        <p>The system will:</p>
+                        <ul style="margin-left: 1rem; margin-top: 0.5rem; line-height: 1.8;">
+                            <li>Detect objects using computer vision</li>
+                            <li>Use LLM to describe the scene</li>
+                            <li>Generate 3D objects matching detected items</li>
+                            <li>Ray trace the scene in real-time with WebGPU</li>
+                        </ul>
+                    </div>
+                    <div class="detected-objects" id="detectedObjects"></div>
+                </div>
+
+                <div class="scene-info" id="sceneInfo" style="display: none;">
+                    <h4>📐 Generated Scene</h4>
+                    <ul id="sceneObjectsList"></ul>
+                </div>
+
+                <div class="panel" style="margin-top: 1rem;">
+                    <h3>⚙️ How It Works</h3>
+                    <ol style="margin-left: 1rem; line-height: 2; font-size: 0.9rem; color: #aaa;">
+                        <li><strong>Computer Vision:</strong> TensorFlow.js COCO-SSD detects objects in your webcam feed</li>
+                        <li><strong>LLM Integration:</strong> WebLLM (Qwen) generates a scene description based on detected objects</li>
+                        <li><strong>Scene Generation:</strong> Objects are converted to 3D spheres with appropriate materials</li>
+                        <li><strong>Ray Tracing:</strong> WebGPU compute shaders trace millions of rays per frame</li>
+                        <li><strong>Real-time Rendering:</strong> Reflections, shadows, and global illumination updated interactively</li>
+                    </ol>
+                </div>
+
+                <div class="panel" style="margin-top: 1rem;">
+                    <h3>🎯 Controls</h3>
+                    <ul style="margin-left: 1rem; line-height: 2; font-size: 0.9rem; color: #aaa;">
+                        <li><strong>Mouse Drag:</strong> Rotate camera</li>
+                        <li><strong>Scroll:</strong> Zoom in/out</li>
+                        <li><strong>Ray Bounces:</strong> Control reflection depth</li>
+                        <li><strong>Resolution:</strong> Balance quality vs performance</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import WebLLM for AI scene description
+        import * as webllm from 'https://unpkg.com/@mlc-ai/web-llm@0.2.78/dist/index.min.js';
+        
+        // Load TensorFlow.js and COCO-SSD for computer vision
+        const tfScript = document.createElement('script');
+        tfScript.src = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js';
+        document.head.appendChild(tfScript);
+
+        const cocoScript = document.createElement('script');
+        cocoScript.src = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js';
+        document.head.appendChild(cocoScript);
+
+        // DOM Elements
+        const canvas = document.getElementById('raytracerCanvas');
+        const video = document.getElementById('webcamVideo');
+        const overlay = document.getElementById('webcamOverlay');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        const aiDescription = document.getElementById('aiDescription');
+        const detectedObjectsEl = document.getElementById('detectedObjects');
+        const sceneInfo = document.getElementById('sceneInfo');
+        const sceneObjectsList = document.getElementById('sceneObjectsList');
+
+        // Stats elements
+        const fpsStat = document.getElementById('fpsStat');
+        const raysStat = document.getElementById('raysStat');
+        const objectsStat = document.getElementById('objectsStat');
+        const bouncesStat = document.getElementById('bouncesStat');
+
+        // Controls
+        const bouncesSlider = document.getElementById('bouncesSlider');
+        const bouncesValue = document.getElementById('bouncesValue');
+        const resolutionSelect = document.getElementById('resolutionSelect');
+        const sceneSelect = document.getElementById('sceneSelect');
+        const aiRateSelect = document.getElementById('aiRateSelect');
+        const startWebcamBtn = document.getElementById('startWebcamBtn');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const regenerateBtn = document.getElementById('regenerateBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        // State
+        let device, pipeline, bindGroup, sampler;
+        let texture, textureView;
+        let storageTexture, storageTextureView;
+        let uniformBuffer;
+        let rendering = false;
+        let animationFrameId;
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let rayBounces = 3;
+        let resolutionScale = 1;
+        let cameraAngle = { x: 0, y: 0.3, z: 0 };
+        let cameraDistance = 5;
+        let isDragging = false;
+        let lastMouse = { x: 0, y: 0 };
+        let sceneObjects = [];
+        let detectedObjects = [];
+        let cvModel = null;
+        let llmEngine = null;
+        let aiUpdateInterval = null;
+        let stream = null;
+
+        // Material types
+        const MATERIALS = {
+            DIFFUSE: 0,
+            METAL: 1,
+            GLASS: 2,
+            EMISSIVE: 3
+        };
+
+        // Object to material mapping
+        const OBJECT_MATERIALS = {
+            'person': MATERIALS.DIFFUSE,
+            'chair': MATERIALS.DIFFUSE,
+            'couch': MATERIALS.DIFFUSE,
+            'table': MATERIALS.DIFFUSE,
+            'laptop': MATERIALS.METAL,
+            'keyboard': MATERIALS.METAL,
+            'mouse': MATERIALS.METAL,
+            'remote': MATERIALS.METAL,
+            'cup': MATERIALS.GLASS,
+            'bottle': MATERIALS.GLASS,
+            'wine glass': MATERIALS.GLASS,
+            'tv': MATERIALS.EMISSIVE,
+            'cell phone': MATERIALS.METAL,
+            'book': MATERIALS.DIFFUSE,
+            'clock': MATERIALS.METAL,
+            'vase': MATERIALS.GLASS,
+            'potted plant': MATERIALS.DIFFUSE,
+            'default': MATERIALS.DIFFUSE
+        };
+
+        // Colors for objects
+        const OBJECT_COLORS = [
+            [1, 0.3, 0.3], // Red
+            [0.3, 1, 0.3], // Green
+            [0.3, 0.3, 1], // Blue
+            [1, 1, 0.3],   // Yellow
+            [1, 0.3, 1],   // Magenta
+            [0.3, 1, 1],   // Cyan
+            [1, 0.6, 0.2], // Orange
+            [0.6, 0.2, 1], // Purple
+        ];
+
+        // Initialize WebGPU
+        async function initWebGPU() {
+            loadingText.textContent = 'Initializing WebGPU...';
+            
+            if (!navigator.gpu) {
+                throw new Error('WebGPU not supported in this browser');
+            }
+
+            const adapter = await navigator.gpu.requestAdapter({
+                powerPreference: 'high-performance'
+            });
+            
+            if (!adapter) {
+                throw new Error('No appropriate GPU adapter found');
+            }
+
+            device = await adapter.requestDevice();
+            
+            // Set canvas size
+            const width = Math.floor(512 * resolutionScale);
+            const height = Math.floor(288 * resolutionScale);
+            canvas.width = width;
+            canvas.height = height;
+
+            // Create output texture
+            texture = device.createTexture({
+                size: [width, height],
+                format: 'rgba8unorm',
+                usage: GPUTextureUsage.TEXTURE_BINDING |
+                       GPUTextureUsage.STORAGE_BINDING |
+                       GPUTextureUsage.COPY_SRC
+            });
+            textureView = texture.createView();
+
+            // Create storage texture for compute shader
+            storageTexture = device.createTexture({
+                size: [width, height],
+                format: 'rgba32float',
+                usage: GPUTextureUsage.STORAGE_BINDING
+            });
+            storageTextureView = storageTexture.createView();
+
+            // Create uniform buffer
+            uniformBuffer = device.createBuffer({
+                size: 256,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
+
+            // Create sampler
+            sampler = device.createSampler({
+                magFilter: 'linear',
+                minFilter: 'linear',
+            });
+
+            return { width, height };
+        }
+
+        // WGSL Ray Tracing Shader
+        const rayTracingShader = `
+            struct Uniforms {
+                cameraPos: vec3f,
+                cameraDir: vec3f,
+                cameraUp: vec3f,
+                cameraRight: vec3f,
+                fov: f32,
+                aspectRatio: f32,
+                rayBounces: u32,
+                frameCount: u32,
+                numObjects: u32,
+                padding: vec3f,
+            };
+
+            struct Sphere {
+                center: vec3f,
+                radius: f32,
+                color: vec3f,
+                material: u32,
+                emission: f32,
+                roughness: f32,
+                padding: vec2f,
+            };
+
+            struct Scene {
+                spheres: array<Sphere, 32>,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+            @group(0) @binding(1) var outputTexture: texture_storage_2d<rgba8unorm, write>;
+            @group(0) @binding(2) var sceneData: texture_storage_2d<rgba32float, read>;
+            @group(0) @binding(3) var mySampler: sampler;
+
+            fn hash(p: vec3f) -> f32 {
+                var p3 = fract(p * 0.1031);
+                p3 += dot(p3, p3.yzx + 33.33);
+                return fract((p3.x + p3.y) * p3.z);
+            }
+
+            fn random(inout seed: f32) -> f32 {
+                seed = fract(seed * 141.317);
+                return seed;
+            }
+
+            fn intersectSphere(origin: vec3f, dir: vec3f, sphere: Sphere) -> vec2f {
+                let oc = origin - sphere.center;
+                let b = dot(oc, dir);
+                let c = dot(oc, oc) - sphere.radius * sphere.radius;
+                let h = b * b - c;
+                
+                if (h < 0.0) {
+                    return vec2f(-1.0, -1.0);
+                }
+                
+                let t = -b - sqrt(h);
+                if (t > 0.001) {
+                    return vec2f(t, 1.0);
+                }
+                
+                return vec2f(-1.0, -1.0);
+            }
+
+            fn reflect(v: vec3f, n: vec3f) -> vec3f {
+                return v - 2.0 * dot(v, n) * n;
+            }
+
+            fn refract(v: vec3f, n: vec3f, etai_over_etat: f32) -> vec3f {
+                let r = etai_over_etat * v;
+                let c = -sqrt(1.0 - dot(r, r)) * n;
+                return r + c;
+            }
+
+            fn getNormal(point: vec3f, sphere: Sphere) -> vec3f {
+                return normalize(point - sphere.center);
+            }
+
+            fn traceRay(origin: vec3f, dir: vec3f, depth: u32, inout seed: f32) -> vec3f {
+                var color = vec3f(0.0);
+                var throughput = vec3f(1.0);
+                var currentOrigin = origin;
+                var currentDir = dir;
+                
+                for (var i = 0u; i < uniforms.rayBounces; i = i + 1u) {
+                    var closestT = 1000000.0;
+                    var closestIdx = -1i;
+                    var hitFront = false;
+                    
+                    // Find closest intersection
+                    for (var j = 0u; j < uniforms.numObjects; j = j + 1u) {
+                        let sphere = sceneData.spheres[j];
+                        let t = intersectSphere(currentOrigin, currentDir, sphere);
+                        
+                        if (t.x > 0.001 && t.x < closestT) {
+                            closestT = t.x;
+                            closestIdx = j;
+                            hitFront = t.y > 0.0;
+                        }
+                    }
+                    
+                    if (closestIdx < 0) {
+                        // Sky color
+                        let t = 0.5 * (currentDir.y + 1.0);
+                        let skyColor = mix(vec3f(0.1, 0.1, 0.2), vec3f(0.5, 0.7, 1.0), t);
+                        color += throughput * skyColor;
+                        break;
+                    }
+                    
+                    let hitSphere = sceneData.spheres[closestIdx];
+                    let hitPoint = currentOrigin + closestT * currentDir;
+                    let normal = getNormal(hitPoint, hitSphere);
+                    let viewDir = -currentDir;
+                    
+                    // Add emission
+                    if (hitSphere.emission > 0.0) {
+                        color += throughput * hitSphere.color * hitSphere.emission;
+                    }
+                    
+                    // Handle materials
+                    let matType = hitSphere.material;
+                    var scatteredDir = vec3f(0.0);
+                    var attenuation = vec3f(1.0);
+                    
+                    if (matType == u32(0)) { // DIFFUSE
+                        let target = normal + vec3f(random(seed), random(seed), random(seed));
+                        scatteredDir = normalize(target);
+                        attenuation = hitSphere.color;
+                    } else if (matType == u32(1)) { // METAL
+                        let reflected = reflect(currentDir, normal);
+                        let fuzz = hitSphere.roughness;
+                        scatteredDir = reflected + fuzz * vec3f(random(seed) - 0.5, random(seed) - 0.5, random(seed) - 0.5);
+                        scatteredDir = normalize(scatteredDir);
+                        attenuation = hitSphere.color;
+                        if (dot(scatteredDir, normal) < 0.0) {
+                            break; // Absorbed
+                        }
+                    } else if (matType == u32(2)) { // GLASS
+                        let refractionRatio = dot(currentDir, normal) > 0.0 ? 1.5 : 0.666;
+                        let outwardNormal = dot(currentDir, normal) > 0.0 ? -normal : normal;
+                        let cosTheta = min(dot(-currentDir, outwardNormal), 1.0);
+                        let sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+                        
+                        let reflectProb = if (sinTheta * refractionRatio > 1.0) {
+                            1.0
+                        } else {
+                            let r0 = (1.0 - refractionRatio) / (1.0 + refractionRatio);
+                            let r0Sq = r0 * r0;
+                            r0Sq + (1.0 - r0Sq) * pow(1.0 - cosTheta, 5.0)
+                        };
+                        
+                        if (random(seed) < reflectProb) {
+                            scatteredDir = reflect(currentDir, normal);
+                        } else {
+                            scatteredDir = refract(currentDir, outwardNormal, refractionRatio);
+                        }
+                        scatteredDir = normalize(scatteredDir);
+                        attenuation = vec3f(0.9);
+                    } else if (matType == u32(3)) { // EMISSIVE
+                        color += throughput * hitSphere.color * hitSphere.emission;
+                        break;
+                    }
+                    
+                    currentOrigin = hitPoint;
+                    currentDir = scatteredDir;
+                    throughput *= attenuation;
+                    
+                    if (length(throughput) < 0.01) {
+                        break;
+                    }
+                }
+                
+                return color;
+            }
+
+            @compute @workgroup_size(8, 8)
+            fn main(@builtin(global_invocation_id) id: vec3u) {
+                let width = textureDimensions(outputTexture).x;
+                let height = textureDimensions(outputTexture).y;
+                
+                if (id.x >= width || id.y >= height) {
+                    return;
+                }
+
+                let frameId = uniforms.frameCount;
+                var seed = hash(vec3f(f32(id.x), f32(id.y), f32(frameId)));
+                
+                // Calculate ray direction with anti-aliasing
+                let u = (f32(id.x) + random(seed)) / f32(width);
+                let v = (f32(id.y) + random(seed)) / f32(height);
+                
+                let x = (2.0 * u - 1.0) * uniforms.fov * uniforms.aspectRatio;
+                let y = (1.0 - 2.0 * v) * uniforms.fov;
+                
+                var rayDir = normalize(x * uniforms.cameraRight + y * uniforms.cameraUp + uniforms.cameraDir);
+                
+                // Trace ray
+                let color = traceRay(uniforms.cameraPos, rayDir, 0u, seed);
+                
+                // Tone mapping (ACES)
+                let a = 2.51;
+                let b = 0.03;
+                let c = 2.43;
+                let d = 0.59;
+                let e = 0.14;
+                let mappedColor = saturate((color * (a * color + b)) / (color * (c * color + d) + e));
+                
+                // Gamma correction
+                let gammaCorrected = pow(mappedColor, vec3f(1.0 / 2.2));
+                
+                let outColor = vec4f(gammaCorrected, 1.0);
+                textureStore(outputTexture, id.xy, outColor);
+            }
+        `;
+
+        // Create pipeline
+        async function createPipeline(width, height) {
+            loadingText.textContent = 'Creating ray tracing pipeline...';
+            
+            const shaderModule = device.createShaderModule({
+                code: rayTracingShader,
+            });
+
+            const bindGroupLayout = device.createBindGroupLayout({
+                entries: [
+                    { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+                    { binding: 1, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba8unorm' } },
+                    { binding: 2, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'read-only', format: 'rgba32float' } },
+                    { binding: 3, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
+                ]
+            });
+
+            const pipelineLayout = device.createPipelineLayout({
+                bindGroupLayouts: [bindGroupLayout]
+            });
+
+            pipeline = device.createComputePipeline({
+                layout: pipelineLayout,
+                compute: {
+                    module: shaderModule,
+                    entryPoint: 'main',
+                },
+            });
+
+            bindGroup = device.createBindGroup({
+                layout: bindGroupLayout,
+                entries: [
+                    { binding: 0, resource: { buffer: uniformBuffer } },
+                    { binding: 1, resource: storageTextureView },
+                    { binding: 2, resource: storageTextureView },
+                    { binding: 3, resource: sampler },
+                ]
+            });
+        }
+
+        // Encode scene objects into storage texture
+        function encodeSceneToTexture() {
+            const width = 4;
+            const height = Math.ceil(sceneObjects.length / 4);
+            const dataSize = width * height * 16; // 4 floats per sphere, 16 bytes
+            
+            const data = new Float32Array(dataSize);
+            
+            for (let i = 0; i < sceneObjects.length; i++) {
+                const obj = sceneObjects[i];
+                const idx = i * 16;
+                data[idx] = obj.center[0];
+                data[idx + 1] = obj.center[1];
+                data[idx + 2] = obj.center[2];
+                data[idx + 3] = obj.radius;
+                data[idx + 4] = obj.color[0];
+                data[idx + 5] = obj.color[1];
+                data[idx + 6] = obj.color[2];
+                data[idx + 7] = obj.material;
+                data[idx + 8] = obj.emission || 0;
+                data[idx + 9] = obj.roughness || 0;
+            }
+
+            // Create and upload scene texture
+            const sceneTexture = device.createTexture({
+                size: [width, height],
+                format: 'rgba32float',
+                usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST
+            });
+
+            device.queue.writeTexture(
+                { texture: sceneTexture },
+                data,
+                { bytesPerRow: width * 16 },
+                [width, height]
+            );
+
+            // Update bind group with new scene texture
+            if (storageTextureView) {
+                // We need to recreate the bind group
+            }
+
+            return sceneTexture.createView();
+        }
+
+        // Generate Cornell Box scene
+        function generateCornellBox() {
+            return [
+                // Walls
+                { center: [0, 2.5, -2.5], radius: 2.5, color: [0.8, 0.8, 0.8], material: MATERIALS.DIFFUSE },
+                { center: [0, 2.5, 2.5], radius: 2.5, color: [0.8, 0.8, 0.8], material: MATERIALS.DIFFUSE },
+                { center: [-2.5, 2.5, 0], radius: 2.5, color: [1, 0.2, 0.2], material: MATERIALS.DIFFUSE },
+                { center: [2.5, 2.5, 0], radius: 2.5, color: [0.2, 1, 0.2], material: MATERIALS.DIFFUSE },
+                { center: [0, 5, 0], radius: 5, color: [0.8, 0.8, 0.8], material: MATERIALS.DIFFUSE },
+                { center: [0, 0, 0], radius: 5, color: [0.8, 0.8, 0.8], material: MATERIALS.DIFFUSE },
+                // Light
+                { center: [0, 4.9, 0], radius: 1, color: [1, 1, 0.9], material: MATERIALS.EMISSIVE, emission: 2.0 },
+                // Boxes
+                { center: [-1, 1, -0.5], radius: 1, color: [0.8, 0.8, 0.2], material: MATERIALS.DIFFUSE },
+                { center: [1.2, 0.6, 0.5], radius: 0.6, color: [0.2, 0.8, 0.8], material: MATERIALS.DIFFUSE },
+                // Metal sphere
+                { center: [0, 0.8, 0.5], radius: 0.8, color: [0.9, 0.9, 0.9], material: MATERIALS.METAL, roughness: 0.1 },
+                // Glass sphere
+                { center: [-0.5, 0.6, -0.8], radius: 0.6, color: [0.6, 0.8, 1], material: MATERIALS.GLASS },
+            ];
+        }
+
+        // Generate random spheres scene
+        function generateRandomSpheres() {
+            const spheres = [];
+            const numSpheres = 15 + Math.floor(Math.random() * 10);
+            
+            // Floor
+            spheres.push({ center: [0, 0, 0], radius: 10, color: [0.5, 0.5, 0.5], material: MATERIALS.DIFFUSE });
+            
+            // Random spheres
+            for (let i = 0; i < numSpheres; i++) {
+                const angle = (i / numSpheres) * Math.PI * 2;
+                const radius = 2 + Math.random() * 2;
+                const dist = 3 + Math.random() * 3;
+                
+                spheres.push({
+                    center: [Math.cos(angle) * dist, radius, Math.sin(angle) * dist],
+                    radius: radius,
+                    color: OBJECT_COLORS[i % OBJECT_COLORS.length],
+                    material: Math.floor(Math.random() * 3),
+                    roughness: Math.random() * 0.3
+                });
+            }
+            
+            // Light
+            spheres.push({
+                center: [0, 8, 0],
+                radius: 2,
+                color: [1, 1, 0.95],
+                material: MATERIALS.EMISSIVE,
+                emission: 1.5
+            });
+            
+            return spheres;
+        }
+
+        // Generate material showcase
+        function generateMaterialShowcase() {
+            const spheres = [
+                // Floor
+                { center: [0, 0, 0], radius: 8, color: [0.3, 0.3, 0.3], material: MATERIALS.DIFFUSE },
+                // Back wall
+                { center: [0, 4, -4], radius: 4, color: [0.6, 0.6, 0.6], material: MATERIALS.DIFFUSE },
+                // Light
+                { center: [0, 7.9, 0], radius: 1.5, color: [1, 1, 0.9], material: MATERIALS.EMISSIVE, emission: 2.0 },
+            ];
+            
+            // Material spheres
+            const materials = [
+                { name: 'Diffuse Red', mat: MATERIALS.DIFFUSE, color: [1, 0.3, 0.3], rough: 0 },
+                { name: 'Diffuse Green', mat: MATERIALS.DIFFUSE, color: [0.3, 1, 0.3], rough: 0 },
+                { name: 'Diffuse Blue', mat: MATERIALS.DIFFUSE, color: [0.3, 0.3, 1], rough: 0 },
+                { name: 'Metal Chrome', mat: MATERIALS.METAL, color: [0.95, 0.95, 0.95], rough: 0.05 },
+                { name: 'Metal Brushed', mat: MATERIALS.METAL, color: [0.8, 0.8, 0.8], rough: 0.3 },
+                { name: 'Glass Clear', mat: MATERIALS.GLASS, color: [0.9, 0.95, 1], rough: 0 },
+                { name: 'Glass Tinted', mat: MATERIALS.GLASS, color: [0.5, 0.9, 0.5], rough: 0 },
+            ];
+            
+            materials.forEach((m, i) => {
+                const x = (i % 4) * 2 - 3;
+                const z = Math.floor(i / 4) * 2 - 1;
+                spheres.push({
+                    center: [x, 1, z],
+                    radius: 0.9,
+                    color: m.color,
+                    material: m.mat,
+                    roughness: m.rough
+                });
+            });
+            
+            return spheres;
+        }
+
+        // Generate scene from detected objects
+        function generateSceneFromObjects(detected) {
+            const spheres = [
+                // Floor
+                { center: [0, 0, 0], radius: 8, color: [0.4, 0.4, 0.4], material: MATERIALS.DIFFUSE },
+                // Back wall
+                { center: [0, 4, -4], radius: 4, color: [0.5, 0.5, 0.5], material: MATERIALS.DIFFUSE },
+                // Light
+                { center: [0, 7.9, 0], radius: 1.5, color: [1, 1, 0.9], material: MATERIALS.EMISSIVE, emission: 1.5 },
+            ];
+            
+            // Add spheres for detected objects
+            detected.forEach((obj, i) => {
+                const angle = (i / Math.max(detected.length, 1)) * Math.PI * 2;
+                const dist = 2 + (i % 3) * 0.5;
+                const material = OBJECT_MATERIALS[obj.class] || OBJECT_MATERIALS.default;
+                const color = OBJECT_COLORS[i % OBJECT_COLORS.length];
+                
+                spheres.push({
+                    center: [Math.cos(angle) * dist, 1 + (i % 3) * 0.5, Math.sin(angle) * dist],
+                    radius: 0.5 + Math.random() * 0.3,
+                    color: color,
+                    material: material,
+                    roughness: material === MATERIALS.METAL ? 0.1 : 0
+                });
+            });
+            
+            return spheres;
+        }
+
+        // Update scene
+        function updateScene(sceneType) {
+            loadingText.textContent = 'Generating scene...';
+            
+            switch (sceneType) {
+                case 'cornell':
+                    sceneObjects = generateCornellBox();
+                    break;
+                case 'spheres':
+                    sceneObjects = generateRandomSpheres();
+                    break;
+                case 'materials':
+                    sceneObjects = generateMaterialShowcase();
+                    break;
+                case 'ai':
+                default:
+                    if (detectedObjects.length > 0) {
+                        sceneObjects = generateSceneFromObjects(detectedObjects);
+                    } else {
+                        sceneObjects = generateRandomSpheres();
+                    }
+                    break;
+            }
+            
+            objectsStat.textContent = sceneObjects.length;
+            
+            // Update scene info panel
+            if (sceneObjects.length > 0) {
+                sceneInfo.style.display = 'block';
+                sceneObjectsList.innerHTML = sceneObjects.map((obj, i) => {
+                    const matNames = ['Diffuse', 'Metal', 'Glass', 'Emissive'];
+                    return `<li>Sphere ${i + 1}: ${matNames[obj.material]} - Color: [${obj.color.map(c => c.toFixed(1)).join(', ')}]</li>`;
+                }).join('');
+            }
+        }
+
+        // Render loop
+        function render(frameCount) {
+            if (!rendering) return;
+            
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Calculate camera vectors
+            const camY = Math.sin(cameraAngle.y) * cameraDistance;
+            const camXZ = Math.cos(cameraAngle.y) * cameraDistance;
+            const cameraPos = [
+                Math.sin(cameraAngle.x) * camXZ,
+                camY,
+                Math.cos(cameraAngle.x) * camXZ
+            ];
+            
+            const cameraDir = normalize([
+                -Math.sin(cameraAngle.x) * Math.cos(cameraAngle.y),
+                -Math.sin(cameraAngle.y),
+                -Math.cos(cameraAngle.x) * Math.cos(cameraAngle.y)
+            ]);
+            
+            const cameraUp = normalize(cross(cameraDir, [Math.cos(cameraAngle.x), 0, -Math.sin(cameraAngle.x)]));
+            const cameraRight = normalize(cross(cameraUp, cameraDir));
+            
+            // Update uniforms
+            const uniformData = new Float32Array([
+                ...cameraPos,
+                ...cameraDir,
+                ...cameraUp,
+                ...cameraRight,
+                1.0, // fov
+                width / height,
+                rayBounces,
+                frameCount,
+                sceneObjects.length,
+                0, 0, 0 // padding
+            ]);
+            
+            device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+            
+            // Create scene texture
+            const sceneTextureView = encodeSceneToTexture();
+            
+            // Recreate bind group with scene texture
+            const bindGroup = device.createBindGroup({
+                layout: pipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: uniformBuffer } },
+                    { binding: 1, resource: storageTextureView },
+                    { binding: 2, resource: sceneTextureView },
+                    { binding: 3, resource: sampler },
+                ]
+            });
+            
+            // Encode commands
+            const commandEncoder = device.createCommandEncoder();
+            
+            const passEncoder = commandEncoder.beginComputePass();
+            passEncoder.setPipeline(pipeline);
+            passEncoder.setBindGroup(0, bindGroup);
+            passEncoder.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
+            passEncoder.end();
+            
+            // Copy to canvas texture
+            const canvasTexture = device.createTexture({
+                size: [width, height],
+                format: 'rgba8unorm',
+                usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING
+            });
+            
+            commandEncoder.copyTextureToTexture(
+                { texture: storageTexture },
+                { texture: canvasTexture },
+                [width, height]
+            );
+            
+            // Copy to canvas
+            commandEncoder.copyTextureToTexture(
+                { texture: canvasTexture },
+                { texture: context.getCurrentTexture() },
+                [width, height]
+            );
+            
+            device.queue.submit([commandEncoder.finish()]);
+            
+            // Update FPS
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                fpsStat.textContent = frameCount;
+                raysStat.textContent = (width * height * rayBounces).toLocaleString();
+                frameCount = 0;
+                lastTime = now;
+            }
+            
+            animationFrameId = requestAnimationFrame(() => render(frameCount));
+        }
+
+        // Helper functions
+        function normalize(v) {
+            const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+            return len > 0 ? [v[0] / len, v[1] / len, v[2] / len] : [0, 0, 0];
+        }
+
+        function cross(a, b) {
+            return [
+                a[1] * b[2] - a[2] * b[1],
+                a[2] * b[0] - a[0] * b[2],
+                a[0] * b[1] - a[1] * b[0]
+            ];
+        }
+
+        // Initialize computer vision
+        async function initComputerVision() {
+            loadingText.textContent = 'Loading computer vision model...';
+            
+            // Wait for TensorFlow.js to load
+            await new Promise(resolve => {
+                const check = setInterval(() => {
+                    if (window.tf && window.cocoSsd) {
+                        clearInterval(check);
+                        resolve();
+                    }
+                }, 100);
+                setTimeout(resolve, 5000);
+            });
+            
+            if (window.cocoSsd) {
+                cvModel = await cocoSsd.load();
+                console.log('Computer vision model loaded');
+            }
+        }
+
+        // Analyze webcam frame
+        async function analyzeFrame() {
+            if (!cvModel || !stream) return;
+            
+            try {
+                const predictions = await cvModel.detect(video);
+                
+                detectedObjects = predictions.map(p => ({
+                    class: p.class,
+                    confidence: p.score
+                }));
+                
+                // Update UI
+                detectedObjectsEl.innerHTML = detectedObjects.map(obj => 
+                    `<span class="object-tag">${obj.class} (${(obj.confidence * 100).toFixed(0)}%)</span>`
+                ).join('');
+                
+                // Draw bounding boxes on overlay
+                drawBoundingBoxes(predictions);
+                
+                // Generate scene description with LLM
+                await generateSceneDescription();
+                
+                // Update ray tracer scene
+                if (sceneSelect.value === 'ai') {
+                    updateScene('ai');
+                }
+                
+            } catch (error) {
+                console.error('Analysis error:', error);
+            }
+        }
+
+        // Draw bounding boxes
+        function drawBoundingBoxes(predictions) {
+            const ctx = overlay.getContext('2d');
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            
+            const scaleX = overlay.width / video.videoWidth;
+            const scaleY = overlay.height / video.videoHeight;
+            
+            predictions.forEach(pred => {
+                const [x, y, width, height] = pred.bbox;
+                
+                ctx.strokeStyle = '#00d9ff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x * scaleX, y * scaleY, width * scaleX, height * scaleY);
+                
+                ctx.fillStyle = 'rgba(0, 217, 255, 0.8)';
+                ctx.font = '10px Arial';
+                ctx.fillText(`${pred.class}`, x * scaleX, y * scaleY - 2);
+            });
+        }
+
+        // Generate scene description with LLM
+        async function generateSceneDescription() {
+            if (!llmEngine) {
+                aiDescription.innerHTML = `<p><strong>Detected:</strong> ${detectedObjects.map(o => o.class).join(', ') || 'nothing'}</p>
+                    <p>Start the LLM to get AI-generated scene descriptions.</p>`;
+                return;
+            }
+            
+            try {
+                const objectList = detectedObjects.map(o => o.class).join(', ');
+                const prompt = `Describe a 3D ray traced scene based on these detected objects: ${objectList || 'empty room'}. 
+                    Keep it brief (2-3 sentences). Mention what objects are present and suggest materials (metal, glass, diffuse).`;
+                
+                const chunks = await llmEngine.chat.completions.create({
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0.7,
+                    max_tokens: 150,
+                    stream: true
+                });
+                
+                let description = '';
+                for await (const chunk of chunks) {
+                    const delta = chunk.choices[0]?.delta?.content || '';
+                    description += delta;
+                    aiDescription.innerHTML = `<p>${description}</p>
+                        <div class="detected-objects">${detectedObjects.map(obj => 
+                            `<span class="object-tag">${obj.class}</span>`
+                        ).join('')}</div>`;
+                }
+                
+            } catch (error) {
+                console.error('LLM error:', error);
+                aiDescription.innerHTML = `<p><strong>Detected:</strong> ${detectedObjects.map(o => o.class).join(', ') || 'nothing'}</p>`;
+            }
+        }
+
+        // Initialize LLM
+        async function initLLM() {
+            loadingText.textContent = 'Loading AI model (Qwen)...';
+            
+            try {
+                llmEngine = await webllm.CreateMLCEngine('Qwen2.5-1.5B-Instruct-q4f32_1-MLC', {
+                    initProgressCallback: (progress) => {
+                        const percent = Math.round(progress.progress * 100);
+                        loadingText.textContent = `Loading AI: ${percent}%`;
+                    }
+                });
+                
+                console.log('LLM loaded');
+            } catch (error) {
+                console.error('Failed to load LLM:', error);
+                aiDescription.innerHTML = '<p>LLM failed to load. Computer vision will still work.</p>';
+            }
+        }
+
+        // Start webcam
+        async function startWebcam() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 320, height: 240 }
+                });
+                video.srcObject = stream;
+                await video.play();
+                
+                startWebcamBtn.textContent = '✓ Webcam Active';
+                startWebcamBtn.disabled = true;
+                analyzeBtn.disabled = false;
+                
+                // Start auto-analysis if enabled
+                const updateRate = parseInt(aiRateSelect.value);
+                if (updateRate > 0) {
+                    analyzeFrame(); // Initial analysis
+                    aiUpdateInterval = setInterval(analyzeFrame, updateRate);
+                }
+                
+            } catch (error) {
+                console.error('Webcam error:', error);
+                alert('Could not access webcam: ' + error.message);
+            }
+        }
+
+        // Stop everything
+        function stop() {
+            rendering = false;
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            if (aiUpdateInterval) {
+                clearInterval(aiUpdateInterval);
+                aiUpdateInterval = null;
+            }
+            
+            startWebcamBtn.textContent = '📷 Start Webcam';
+            startWebcamBtn.disabled = false;
+            analyzeBtn.disabled = true;
+            loadingOverlay.style.display = 'flex';
+        }
+
+        // Event listeners
+        bouncesSlider.addEventListener('input', (e) => {
+            rayBounces = parseInt(e.target.value);
+            bouncesValue.textContent = rayBounces;
+            bouncesStat.textContent = rayBounces;
+        });
+
+        resolutionSelect.addEventListener('change', async (e) => {
+            resolutionScale = parseFloat(e.target.value);
+            stop();
+            await start();
+        });
+
+        sceneSelect.addEventListener('change', (e) => {
+            updateScene(e.target.value);
+        });
+
+        aiRateSelect.addEventListener('change', (e) => {
+            if (aiUpdateInterval) {
+                clearInterval(aiUpdateInterval);
+            }
+            const rate = parseInt(e.target.value);
+            if (rate > 0 && stream) {
+                aiUpdateInterval = setInterval(analyzeFrame, rate);
+            }
+        });
+
+        startWebcamBtn.addEventListener('click', startWebcam);
+        analyzeBtn.addEventListener('click', analyzeFrame);
+        regenerateBtn.addEventListener('click', () => updateScene(sceneSelect.value));
+        stopBtn.addEventListener('click', stop);
+
+        // Mouse controls for camera
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouse = { x: e.clientX, y: e.clientY };
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const deltaX = e.clientX - lastMouse.x;
+            const deltaY = e.clientY - lastMouse.y;
+            
+            cameraAngle.x += deltaX * 0.01;
+            cameraAngle.y += deltaY * 0.01;
+            cameraAngle.y = Math.max(-1.5, Math.min(1.5, cameraAngle.y));
+            
+            lastMouse = { x: e.clientX, y: e.clientY };
+        });
+
+        canvas.addEventListener('mouseup', () => isDragging = false);
+        canvas.addEventListener('mouseleave', () => isDragging = false);
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            cameraDistance += e.deltaY * 0.01;
+            cameraDistance = Math.max(2, Math.min(10, cameraDistance));
+        });
+
+        // Touch support
+        canvas.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            
+            const deltaX = e.touches[0].clientX - lastMouse.x;
+            const deltaY = e.touches[0].clientY - lastMouse.y;
+            
+            cameraAngle.x += deltaX * 0.01;
+            cameraAngle.y += deltaY * 0.01;
+            
+            lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        });
+
+        canvas.addEventListener('touchend', () => isDragging = false);
+
+        // Canvas context for display
+        const context = canvas.getContext('webgpu');
+        const format = navigator.gpu.getPreferredCanvasFormat();
+        context.configure({
+            device: null,
+            format,
+            alphaMode: 'premultiplied'
+        });
+
+        // Start function
+        async function start() {
+            try {
+                loadingOverlay.style.display = 'flex';
+                
+                // Initialize WebGPU
+                const { width, height } = await initWebGPU();
+                
+                // Configure canvas
+                context.configure({
+                    device,
+                    format,
+                    alphaMode: 'premultiplied'
+                });
+                
+                // Create pipeline
+                await createPipeline(width, height);
+                
+                // Initialize computer vision in background
+                initComputerVision().catch(console.error);
+                
+                // Initialize LLM in background
+                initLLM().catch(console.error);
+                
+                // Generate initial scene
+                updateScene('cornell');
+                
+                // Start rendering
+                rendering = true;
+                loadingOverlay.style.display = 'none';
+                render(0);
+                
+            } catch (error) {
+                console.error('Initialization error:', error);
+                loadingText.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // Initialize on load
+        start();
+    </script>
+</body>
+</html>
