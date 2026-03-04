@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Physiotherapist - Pose Analysis</title>
+    <link rel="stylesheet" href="../../static/css/style.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #eee;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .back-link {
+            display: inline-block;
+            color: #00d9ff;
+            text-decoration: none;
+            margin-bottom: 1rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00ff88, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        header p {
+            color: #aaa;
+            margin-top: 0.5rem;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1000px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel h2 {
+            color: #00d9ff;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .exercise-selector {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin: 1rem 0;
+        }
+
+        .exercise-btn {
+            padding: 0.75rem;
+            background: rgba(0, 217, 255, 0.1);
+            border: 1px solid rgba(0, 217, 255, 0.3);
+            border-radius: 8px;
+            color: #00d9ff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .exercise-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+        }
+
+        .exercise-btn.active {
+            background: #00d9ff;
+            color: #000;
+        }
+
+        .start-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(90deg, #00ff88, #00d9ff);
+            border: none;
+            border-radius: 12px;
+            color: #000;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .start-btn:hover:not(:disabled) {
+            transform: scale(1.02);
+            box-shadow: 0 5px 20px rgba(0, 255, 136, 0.4);
+        }
+
+        .start-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .feedback-box {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            min-height: 200px;
+            margin-top: 1rem;
+        }
+
+        .feedback-item {
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #00ff88;
+        }
+
+        .feedback-item.warning {
+            border-left-color: #ffbf00;
+        }
+
+        .feedback-item.error {
+            border-left-color: #ff6b6b;
+        }
+
+        .pose-visualization {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .joint-indicator {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.5rem;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.8rem;
+        }
+
+        .joint-indicator.good {
+            border: 2px solid #00ff88;
+        }
+
+        .joint-indicator.bad {
+            border: 2px solid #ff6b6b;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            color: #00ff88;
+            font-family: monospace;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.hidden {
+            display: none;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 255, 136, 0.2);
+            border-top-color: #00ff88;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 1.5rem;
+            color: #00ff88;
+            font-size: 1.1rem;
+        }
+
+        .mode-selector {
+            background: rgba(88, 166, 255, 0.1);
+            border: 2px solid rgba(88, 166, 255, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .mode-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .mode-btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            color: white;
+        }
+
+        .mode-btn.local {
+            background: #00d9ff;
+        }
+
+        .mode-btn.cloud {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .api-key-section {
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .api-key-section input {
+            padding: 0.5rem 1rem;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: white;
+            width: 300px;
+        }
+
+        .api-key-section button {
+            padding: 0.5rem 1rem;
+            background: #238636;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../../index.html" class="back-link">← Back to Overview</a>
+        
+        <header>
+            <h1>🧘 AI Physiotherapist</h1>
+            <p>Real-time pose analysis with computer vision + AI feedback</p>
+        </header>
+
+        <!-- Mode Selector -->
+        <div class="mode-selector">
+            <h3 style="color: #58a6ff; margin-bottom: 0.75rem;">🔧 Choose AI Backend</h3>
+            <div class="mode-buttons">
+                <button class="mode-btn local" id="localModeBtn">📱 Local (BlazePose)</button>
+                <button class="mode-btn cloud" id="cloudModeBtn">☁️ Cloud AI (Advanced Analysis)</button>
+            </div>
+            <p id="modeDescription" style="color: #888; font-size: 0.85rem; margin-top: 0.75rem;">
+                <strong>Local Mode:</strong> BlazePose for pose detection. Fast, no API key needed.
+            </p>
+            <div class="api-key-section" id="apiKeySection">
+                <input type="password" id="hfApiKey" placeholder="Enter Hugging Face API key">
+                <button id="saveApiKeyBtn">Save Key</button>
+                <p style="color: #888; font-size: 0.75rem; margin-top: 0.5rem;">
+                    Get free API key at: <a href="https://huggingface.co/settings/tokens" target="_blank" style="color: #58a6ff;">huggingface.co/settings/tokens</a>
+                </p>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <!-- Left: Camera & Pose -->
+            <div class="panel">
+                <h2>📷 Camera Feed & Pose Detection</h2>
+                
+                <div class="video-container">
+                    <video id="video" autoplay playsinline muted></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+
+                <div class="exercise-selector">
+                    <button class="exercise-btn active" data-exercise="squat">🦵 Squat</button>
+                    <button class="exercise-btn" data-exercise="lunge">🏃 Lunge</button>
+                    <button class="exercise-btn" data-exercise="pushup">💪 Push-up</button>
+                    <button class="exercise-btn" data-exercise="plank">🧱 Plank</button>
+                </div>
+
+                <button class="start-btn" id="startBtn">🎬 Start Exercise Session</button>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Reps</div>
+                        <div class="stat-value" id="repsCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Form Score</div>
+                        <div class="stat-value" id="formScore">-</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Time</div>
+                        <div class="stat-value" id="timer">0s</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Feedback -->
+            <div class="panel">
+                <h2>🗣️ AI Feedback & Coaching</h2>
+                
+                <div class="feedback-box" id="feedbackBox">
+                    <div style="color: #888; text-align: center; padding: 2rem;">
+                        Start an exercise to receive real-time feedback
+                    </div>
+                </div>
+
+                <div class="pose-visualization" id="poseViz">
+                    <div class="joint-indicator">
+                        <div>🦵 Knees</div>
+                        <div id="kneesStatus">-</div>
+                    </div>
+                    <div class="joint-indicator">
+                        <div>🦴 Hips</div>
+                        <div id="hipsStatus">-</div>
+                    </div>
+                    <div class="joint-indicator">
+                        <div>🎯 Shoulders</div>
+                        <div id="shouldersStatus">-</div>
+                    </div>
+                    <div class="joint-indicator">
+                        <div>📐 Back</div>
+                        <div id="backStatus">-</div>
+                    </div>
+                    <div class="joint-indicator">
+                        <div>🦶 Ankles</div>
+                        <div id="anklesStatus">-</div>
+                    </div>
+                    <div class="joint-indicator">
+                        <div>🎪 Head</div>
+                        <div id="headStatus">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1rem;">
+                    <button class="exercise-btn" id="speakBtn" style="width: 100%;">
+                        🔊 Enable Voice Feedback
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="panel">
+            <h2>🔬 How It Works</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
+                <div>
+                    <h4 style="color: #00d9ff; margin-bottom: 0.5rem;">📸 Pose Detection</h4>
+                    <p style="color: #aaa; font-size: 0.9rem;">BlazePose detects 33 body landmarks in real-time using MediaPipe.</p>
+                </div>
+                <div>
+                    <h4 style="color: #00d9ff; margin-bottom: 0.5rem;">🧠 Form Analysis</h4>
+                    <p style="color: #aaa; font-size: 0.9rem;">AI analyzes joint angles and body positioning for each exercise.</p>
+                </div>
+                <div>
+                    <h4 style="color: #00d9ff; margin-bottom: 0.5rem;">🗣️ Voice Coaching</h4>
+                    <p style="color: #aaa; font-size: 0.9rem;">LLM generates natural language feedback. Speech synthesis reads it aloud.</p>
+                </div>
+                <div>
+                    <h4 style="color: #00d9ff; margin-bottom: 0.5rem;">📊 Rep Counting</h4>
+                    <p style="color: #aaa; font-size: 0.9rem;">Automatic repetition counting based on movement patterns.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Loading Pose Detection...</div>
+    </div>
+
+    <!-- MediaPipe Pose Script -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.0/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.0/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.0/drawing_utils.js"></script>
+
+    <script type="module">
+        // State
+        let aiMode = 'local';
+        let hfApiKey = localStorage.getItem('hfApiKey') || '';
+        let poseDetector = null;
+        let isRunning = false;
+        let currentExercise = 'squat';
+        let reps = 0;
+        let formScores = [];
+        let startTime = 0;
+        let timerInterval = null;
+        let voiceEnabled = false;
+        let lastFeedback = '';
+        let poseLandmarks = null;
+
+        // DOM Elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const feedbackBox = document.getElementById('feedbackBox');
+        const repsCount = document.getElementById('repsCount');
+        const formScore = document.getElementById('formScore');
+        const timer = document.getElementById('timer');
+        const speakBtn = document.getElementById('speakBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+
+        // Exercise definitions
+        const exercises = {
+            squat: {
+                name: 'Squat',
+                keyPoints: ['hip', 'knee', 'ankle'],
+                thresholds: { kneeAngle: 90, backAngle: 80 }
+            },
+            lunge: {
+                name: 'Lunge',
+                keyPoints: ['hip', 'knee', 'ankle'],
+                thresholds: { kneeAngle: 90, hipDepth: 0.5 }
+            },
+            pushup: {
+                name: 'Push-up',
+                keyPoints: ['shoulder', 'elbow', 'wrist', 'hip'],
+                thresholds: { elbowAngle: 90, bodyStraight: 0.9 }
+            },
+            plank: {
+                name: 'Plank',
+                keyPoints: ['shoulder', 'hip', 'ankle'],
+                thresholds: { bodyStraight: 0.9, holdTime: 30 }
+            }
+        };
+
+        // Initialize
+        async function init() {
+            try {
+                loadingText.textContent = 'Loading MediaPipe Pose...';
+                
+                // Wait for MediaPipe to load
+                await waitForMediaPipe();
+                
+                // Initialize BlazePose
+                poseDetector = new Pose({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.0/${file}`;
+                    }
+                });
+
+                poseDetector.setOptions({
+                    modelComplexity: 1,
+                    smoothLandmarks: true,
+                    enableSegmentation: false,
+                    minDetectionConfidence: 0.7,
+                    minTrackingConfidence: 0.7
+                });
+
+                poseDetector.onResults(onPoseResults);
+
+                // Start camera
+                await startCamera();
+                
+                hideLoading();
+                
+            } catch (err) {
+                console.error('Init error:', err);
+                loadingText.textContent = 'Error: ' + err.message;
+                setTimeout(() => {
+                    hideLoading();
+                    alert('Pose detection failed. Using demo mode.');
+                }, 2000);
+            }
+        }
+
+        // Wait for MediaPipe
+        function waitForMediaPipe() {
+            return new Promise((resolve) => {
+                const check = setInterval(() => {
+                    if (window.Pose) {
+                        clearInterval(check);
+                        resolve();
+                    }
+                }, 100);
+                setTimeout(resolve, 5000);
+            });
+        }
+
+        // Start camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: 'user' }
+                });
+                video.srcObject = stream;
+                
+                canvas.width = 640;
+                canvas.height = 480;
+            } catch (err) {
+                console.error('Camera error:', err);
+            }
+        }
+
+        // Process pose results
+        async function onPoseResults(results) {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (results.poseLandmarks) {
+                poseLandmarks = results.poseLandmarks;
+                
+                // Draw landmarks
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS,
+                             {color: '#00ff88', lineWidth: 2});
+                drawLandmarks(ctx, results.poseLandmarks,
+                             {color: '#00d9ff', lineWidth: 1, radius: 4});
+                
+                if (isRunning) {
+                    analyzePose(results.poseLandmarks);
+                }
+            }
+            
+            // Draw video
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+        }
+
+        // Analyze pose for current exercise
+        async function analyzePose(landmarks) {
+            const exercise = exercises[currentExercise];
+            const analysis = calculateAngles(landmarks);
+            const feedback = generateFeedback(analysis, exercise);
+            
+            // Update joint indicators
+            updateJointIndicators(analysis);
+            
+            // Count reps
+            if (detectRepMovement(analysis, exercise)) {
+                reps++;
+                repsCount.textContent = reps;
+                speak(`Rep ${reps}`);
+            }
+            
+            // Calculate form score
+            const score = calculateFormScore(analysis, exercise);
+            formScores.push(score);
+            const avgScore = Math.round(formScores.reduce((a,b) => a+b, 0) / formScores.length);
+            formScore.textContent = avgScore + '%';
+            
+            // Generate AI feedback
+            if (feedback !== lastFeedback && aiMode === 'cloud' && hfApiKey) {
+                await generateAIFeedback(analysis, exercise);
+            } else {
+                displayFeedback(feedback);
+            }
+        }
+
+        // Calculate joint angles
+        function calculateAngles(landmarks) {
+            const getAngle = (a, b, c) => {
+                const ab = { x: landmarks[a].x - landmarks[b].x, y: landmarks[a].y - landmarks[b].y };
+                const cb = { x: landmarks[c].x - landmarks[b].x, y: landmarks[c].y - landmarks[b].y };
+                const dot = ab.x * cb.x + ab.y * cb.y;
+                const magA = Math.sqrt(ab.x * ab.x + ab.y * ab.y);
+                const magB = Math.sqrt(cb.x * cb.x + cb.y * cb.y);
+                return Math.acos(dot / (magA * magB)) * 180 / Math.PI;
+            };
+
+            return {
+                leftKnee: getAngle(23, 25, 27),
+                rightKnee: getAngle(24, 26, 28),
+                leftHip: getAngle(11, 23, 25),
+                rightHip: getAngle(12, 24, 26),
+                leftElbow: getAngle(11, 13, 15),
+                rightElbow: getAngle(12, 14, 16),
+                leftShoulder: getAngle(11, 13, 15),
+                rightShoulder: getAngle(12, 14, 16),
+                backAngle: getAngle(11, 23, 25),
+                bodyStraight: calculateBodyStraightness(landmarks)
+            };
+        }
+
+        // Calculate body straightness
+        function calculateBodyStraightness(landmarks) {
+            const shoulderY = (landmarks[11].y + landmarks[12].y) / 2;
+            const hipY = (landmarks[23].y + landmarks[24].y) / 2;
+            const ankleY = (landmarks[27].y + landmarks[28].y) / 2;
+            return 1 - Math.abs(shoulderY - hipY) - Math.abs(hipY - ankleY);
+        }
+
+        // Generate feedback
+        function generateFeedback(analysis, exercise) {
+            const feedback = [];
+            
+            if (currentExercise === 'squat') {
+                if (analysis.leftKnee < 90 && analysis.rightKnee < 90) {
+                    feedback.push({ type: 'good', text: '✅ Good depth!' });
+                } else {
+                    feedback.push({ type: 'warning', text: '⚠️ Go lower - bend knees more' });
+                }
+                
+                if (analysis.backAngle < 80) {
+                    feedback.push({ type: 'error', text: '❌ Keep back straighter' });
+                }
+            }
+            
+            if (currentExercise === 'plank') {
+                if (analysis.bodyStraight < 0.8) {
+                    feedback.push({ type: 'warning', text: '⚠️ Keep body in straight line' });
+                } else {
+                    feedback.push({ type: 'good', text: '✅ Perfect form!' });
+                }
+            }
+            
+            return feedback.length > 0 ? feedback : [{ type: 'good', text: '✅ Keep going!' }];
+        }
+
+        // Detect rep movement
+        let repState = 'up';
+        function detectRepMovement(analysis, exercise) {
+            if (currentExercise === 'squat') {
+                if (repState === 'up' && analysis.leftKnee < 100) {
+                    repState = 'down';
+                } else if (repState === 'down' && analysis.leftKnee > 160) {
+                    repState = 'up';
+                    return true;
+                }
+            }
+            
+            if (currentExercise === 'pushup') {
+                if (repState === 'up' && analysis.leftElbow < 100) {
+                    repState = 'down';
+                } else if (repState === 'down' && analysis.leftElbow > 160) {
+                    repState = 'up';
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // Calculate form score
+        function calculateFormScore(analysis, exercise) {
+            let score = 100;
+            
+            if (currentExercise === 'squat') {
+                if (analysis.leftKnee > 100) score -= 20;
+                if (analysis.backAngle < 80) score -= 30;
+            }
+            
+            if (currentExercise === 'plank') {
+                if (analysis.bodyStraight < 0.8) score -= 30;
+            }
+            
+            return Math.max(0, score);
+        }
+
+        // Update joint indicators
+        function updateJointIndicators(analysis) {
+            const setStatus = (id, value, good) => {
+                const el = document.getElementById(id + 'Status');
+                const parent = el.parentElement;
+                el.textContent = Math.round(value) + '°';
+                parent.className = 'joint-indicator ' + (good ? 'good' : 'bad');
+            };
+            
+            setStatus('knees', analysis.leftKnee, analysis.leftKnee < 100);
+            setStatus('hips', analysis.leftHip, analysis.leftHip > 70);
+            setStatus('shoulders', analysis.leftShoulder, true);
+            setStatus('back', analysis.backAngle, analysis.backAngle > 80);
+            setStatus('ankles', 90, true);
+            setStatus('head', 180, true);
+        }
+
+        // Display feedback
+        function displayFeedback(items) {
+            if (!Array.isArray(items)) {
+                items = [items];
+            }
+            
+            feedbackBox.innerHTML = items.map(item => 
+                `<div class="feedback-item ${item.type}">${item.text}</div>`
+            ).join('');
+        }
+
+        // Generate AI feedback via Hugging Face
+        async function generateAIFeedback(analysis, exercise) {
+            try {
+                const response = await fetch('https://api-inference.huggingface.co/models/Qwen/Qwen2.5-1.5B-Instruct', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${hfApiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        inputs: `You are a physiotherapist. Analyze this ${exercise.name} form: Knee angle: ${Math.round(analysis.leftKnee)}°, Hip angle: ${Math.round(analysis.leftHip)}°, Back angle: ${Math.round(analysis.backAngle)}°. Give brief form correction advice.`,
+                        parameters: { max_new_tokens: 100, temperature: 0.3 }
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const feedback = result[0]?.generated_text || 'Keep going!';
+                    displayFeedback([{ type: 'good', text: '🤖 AI: ' + feedback }]);
+                    speak(feedback);
+                }
+            } catch (err) {
+                console.error('AI feedback error:', err);
+            }
+        }
+
+        // Text-to-speech
+        function speak(text) {
+            if (!voiceEnabled) return;
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.pitch = 1;
+            speechSynthesis.speak(utterance);
+        }
+
+        // Hide loading
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        // Event listeners
+        startBtn.addEventListener('click', () => {
+            if (!isRunning) {
+                isRunning = true;
+                startBtn.textContent = '⏹️ Stop Session';
+                startBtn.style.background = 'linear-gradient(90deg, #ff6b6b, #ff8888)';
+                reps = 0;
+                formScores = [];
+                startTime = Date.now();
+                repsCount.textContent = '0';
+                
+                timerInterval = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    timer.textContent = elapsed + 's';
+                }, 1000);
+                
+                displayFeedback([{ type: 'good', text: '🎬 Starting exercise session...' }]);
+            } else {
+                isRunning = false;
+                startBtn.textContent = '🎬 Start Exercise Session';
+                startBtn.style.background = 'linear-gradient(90deg, #00ff88, #00d9ff)';
+                clearInterval(timerInterval);
+                displayFeedback([{ type: 'good', text: `✅ Session complete! ${reps} reps completed.` }]);
+            }
+        });
+
+        // Exercise selection
+        document.querySelectorAll('.exercise-btn[data-exercise]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.exercise-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentExercise = btn.dataset.exercise;
+                reps = 0;
+                repsCount.textContent = '0';
+                displayFeedback([{ type: 'good', text: `Selected: ${exercises[currentExercise].name}` }]);
+            });
+        });
+
+        // Voice toggle
+        speakBtn.addEventListener('click', () => {
+            voiceEnabled = !voiceEnabled;
+            speakBtn.textContent = voiceEnabled ? '🔊 Voice Feedback ON' : '🔇 Voice Feedback OFF';
+            speakBtn.classList.toggle('active');
+            if (voiceEnabled) {
+                speak('Voice feedback enabled');
+            }
+        });
+
+        // Mode selector
+        document.getElementById('localModeBtn').addEventListener('click', () => {
+            aiMode = 'local';
+            document.getElementById('localModeBtn').classList.add('local');
+            document.getElementById('localModeBtn').classList.remove('cloud');
+            document.getElementById('cloudModeBtn').classList.remove('local');
+            document.getElementById('cloudModeBtn').classList.add('cloud');
+            document.getElementById('modeDescription').innerHTML = '<strong>Local Mode:</strong> BlazePose for pose detection. Fast, no API key needed.';
+            document.getElementById('apiKeySection').style.display = 'none';
+        });
+
+        document.getElementById('cloudModeBtn').addEventListener('click', () => {
+            aiMode = 'cloud';
+            document.getElementById('cloudModeBtn').classList.add('local');
+            document.getElementById('cloudModeBtn').classList.remove('cloud');
+            document.getElementById('localModeBtn').classList.remove('local');
+            document.getElementById('localModeBtn').classList.add('cloud');
+            document.getElementById('modeDescription').innerHTML = '<strong>Cloud AI:</strong> Advanced form analysis with LLM feedback.';
+            document.getElementById('apiKeySection').style.display = hfApiKey ? 'none' : 'block';
+        });
+
+        // API key save
+        document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
+            const key = document.getElementById('hfApiKey').value.trim();
+            if (key) {
+                hfApiKey = key;
+                localStorage.setItem('hfApiKey', key);
+                alert('API key saved!');
+                document.getElementById('apiKeySection').style.display = 'none';
+            }
+        });
+
+        // Load saved API key
+        if (hfApiKey) {
+            document.getElementById('hfApiKey').value = hfApiKey;
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
