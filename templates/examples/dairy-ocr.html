@@ -276,6 +276,21 @@
             <p class="subtitle">AI-powered ear tag recognition and health assessment using WebGPU</p>
         </header>
 
+        <!-- Mode Selector -->
+        <div class="mode-selector" style="background: rgba(88, 166, 255, 0.1); border: 2px solid rgba(88, 166, 255, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; text-align: center;">
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; align-items: center;">
+                <button id="demoModeBtn" style="padding: 0.75rem 1.5rem; background: #238636; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer;">
+                    ⚡ Demo Mode (Fast)
+                </button>
+                <button id="realModeBtn" style="padding: 0.75rem 1.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-weight: bold; cursor: pointer;">
+                    🤖 Real AI Mode (Downloads 2GB)
+                </button>
+            </div>
+            <p id="modeDescription" style="color: #888; font-size: 0.85rem; margin-top: 0.75rem;">
+                <strong>Demo Mode:</strong> Simulated scans, no download required. Great for testing!
+            </p>
+        </div>
+
         <div class="main-layout">
             <!-- Left Panel: Camera & Scan -->
             <div class="panel">
@@ -394,6 +409,7 @@
         let scanHistory = [];
         let totalScans = 0;
         let healthScores = [];
+        let useRealAI = false; // false = demo mode, true = real AI mode
 
         // DOM Elements
         const video = document.getElementById('camera');
@@ -412,13 +428,37 @@
 
         // Initialize
         async function init() {
+            // Start in demo mode by default
+            if (!useRealAI) {
+                statusText.textContent = 'Demo mode - Ready to scan';
+                statusBadge.textContent = 'Demo';
+                statusBadge.className = 'status-badge loading';
+                scanBtn.disabled = false;
+                
+                // Start camera for demo
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'environment' }
+                    });
+                    video.srcObject = stream;
+                    hideLoading();
+                } catch (err) {
+                    statusText.textContent = 'Camera unavailable';
+                    console.error('Camera error:', err);
+                }
+                return;
+            }
+            
+            // Real AI mode
             try {
                 // Load Transformers.js
                 await loadTransformersLibrary();
-                
+
                 // Initialize Moondream2 pipeline
                 statusText.textContent = 'Loading AI model...';
-                
+                statusBadge.textContent = 'Loading';
+                statusBadge.className = 'status-badge loading';
+
                 vqaPipeline = await window.transformers.pipeline(
                     'image-text-to-text',
                     'onnx-community/moondream2',
@@ -453,14 +493,12 @@
                 statusBadge.textContent = 'Error';
                 statusBadge.className = 'status-badge error';
                 
-                // Fallback - show demo mode
+                // Fallback to demo mode
                 setTimeout(() => {
-                    statusText.textContent = 'Demo mode (WebGPU not available)';
-                    statusBadge.textContent = 'Demo';
-                    statusBadge.className = 'status-badge loading';
-                    scanBtn.disabled = false;
+                    useRealAI = false;
+                    demoModeBtn.click();
                     hideLoading();
-                    alert('WebGPU not available. Using demo simulation mode.');
+                    alert('WebGPU not available. Switched to Demo Mode.');
                 }, 2000);
             }
         }
@@ -662,6 +700,42 @@
 
         // Event listeners
         scanBtn.addEventListener('click', scanDier);
+
+        // Mode selector
+        const demoModeBtn = document.getElementById('demoModeBtn');
+        const realModeBtn = document.getElementById('realModeBtn');
+        const modeDescription = document.getElementById('modeDescription');
+
+        demoModeBtn.addEventListener('click', () => {
+            useRealAI = false;
+            demoModeBtn.style.background = '#238636';
+            demoModeBtn.style.border = 'none';
+            realModeBtn.style.background = 'rgba(255,255,255,0.1)';
+            realModeBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+            modeDescription.innerHTML = '<strong>Demo Mode:</strong> Simulated scans, no download required. Great for testing!';
+            statusText.textContent = 'Demo mode active';
+            statusBadge.textContent = 'Demo';
+            statusBadge.className = 'status-badge loading';
+            scanBtn.disabled = false;
+        });
+
+        realModeBtn.addEventListener('click', async () => {
+            if (useRealAI) return; // Already in real mode
+            
+            const confirmed = confirm('Real AI Mode will download ~2GB of model weights. This takes 1-5 minutes depending on your connection. Continue?');
+            if (!confirmed) return;
+            
+            useRealAI = true;
+            realModeBtn.style.background = '#58a6ff';
+            realModeBtn.style.border = 'none';
+            demoModeBtn.style.background = 'rgba(255,255,255,0.1)';
+            demoModeBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+            modeDescription.innerHTML = '<strong>Real AI Mode:</strong> Loading Moondream2 model...';
+            
+            // Hide overlay and init real AI
+            loadingOverlay.classList.remove('hidden');
+            await init();
+        });
 
         // Initialize on load
         init();
