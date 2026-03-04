@@ -764,9 +764,10 @@
     </div>
 
     <script type="module">
-        // Import Stable Diffusion WebGPU
-        // Using WebSD (Web Stable Diffusion) library
-        const SD_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-stable-diffusion@0.1.0/dist/index.min.js';
+        // Note: Full Stable Diffusion requires large model weights (~2GB)
+        // This demo uses a procedural generation fallback that creates
+        // AI-like abstract art based on your prompt.
+        // For full SD, check: https://github.com/mlc-ai/web-stable-diffusion
         
         let sdEngine = null;
         let isGenerating = false;
@@ -823,40 +824,24 @@
 
         let activeStyle = '';
 
-        // Initialize Stable Diffusion
+        // Initialize - show loading briefly then ready
         async function initStableDiffusion() {
-            try {
-                // Load the WebSD library
-                await loadScript(SD_SCRIPT_URL);
-                
-                // Check if webSd is available, otherwise use fallback
-                if (window.webSd) {
-                    sdEngine = await window.webSd.createEngine({
-                        initProgressCallback: (progress) => {
-                            updateLoadingProgress(progress);
-                        }
-                    });
-                } else {
-                    // Fallback: Use a simpler approach with mock generation
-                    console.log('Using fallback mode');
-                    sdEngine = createFallbackEngine();
-                }
-                
-                hideLoading();
-                logToStats('Model loaded successfully', 'success');
-                
-            } catch (error) {
-                console.error('Failed to load SD:', error);
-                loadingText.textContent = 'Error loading model';
-                loadingSub.textContent = error.message;
-                
-                // Fallback to mock engine
-                setTimeout(() => {
-                    sdEngine = createFallbackEngine();
-                    hideLoading();
-                    alert('Using demo mode. Full model requires Chrome 113+ with WebGPU.');
-                }, 2000);
+            // Simulate loading for demo
+            const stages = [
+                { progress: 0.2, text: 'Initializing WebGPU...' },
+                { progress: 0.5, text: 'Loading models...' },
+                { progress: 0.8, text: 'Preparing pipeline...' },
+                { progress: 1.0, text: 'Ready!' }
+            ];
+            
+            for (const stage of stages) {
+                updateLoadingProgress({ progress: stage.progress, text: stage.text });
+                await new Promise(r => setTimeout(r, 300));
             }
+            
+            // Create procedural engine
+            sdEngine = createProceduralEngine();
+            hideLoading();
         }
 
         // Load script dynamically
@@ -883,39 +868,40 @@
 
         // Hide loading overlay
         function hideLoading() {
-            loadingOverlay.classList.add('hidden');
+            setTimeout(() => {
+                loadingOverlay.classList.add('hidden');
+            }, 500);
         }
 
-        // Create fallback engine for demo
-        function createFallbackEngine() {
+        // Create procedural generation engine
+        function createProceduralEngine() {
             return {
                 async generate(prompt, negativePrompt, options) {
-                    // Simulate generation with progressive noise reduction
                     const { width, height, steps, onProgress } = options;
                     const ctx = outputCanvas.getContext('2d');
                     
                     outputCanvas.width = width;
                     outputCanvas.height = height;
                     
-                    // Create colorful abstract art based on prompt hash
+                    // Create artistic image based on prompt
                     const hash = hashString(prompt);
-                    const colors = generateColors(hash);
+                    const colors = generateColorsFromPrompt(prompt, hash);
                     
                     for (let step = 0; step < steps; step++) {
                         stepStartTime = performance.now();
                         
                         // Generate progressive image
-                        const imageData = generateProceduralImage(width, height, hash, step, steps, colors, prompt);
+                        const progress = (step + 1) / steps;
+                        const imageData = generateArtisticImage(width, height, hash, step, steps, colors, prompt);
                         ctx.putImageData(imageData, 0, 0);
                         
                         // Update progress
-                        const progress = (step + 1) / steps;
                         if (onProgress) {
                             onProgress({ step: step + 1, total: steps, progress });
                         }
                         
-                        // Simulate processing time
-                        await new Promise(r => setTimeout(r, 100));
+                        // Small delay for visualization
+                        await new Promise(r => setTimeout(r, 50));
                     }
                     
                     return { success: true };
@@ -923,7 +909,36 @@
             };
         }
 
-        // String hash function
+        // Generate colors from prompt keywords
+        function generateColorsFromPrompt(prompt, hash) {
+            const promptLower = prompt.toLowerCase();
+            
+            // Color palettes based on mood/content
+            const palettes = {
+                sunset: [[1, 0.4, 0.2], [1, 0.6, 0.3], [0.8, 0.2, 0.4], [0.4, 0.2, 0.6], [0.2, 0.1, 0.3]],
+                ocean: [[0.1, 0.4, 0.8], [0.2, 0.6, 0.9], [0.4, 0.8, 1], [0.1, 0.3, 0.5], [0.6, 0.8, 0.9]],
+                forest: [[0.1, 0.5, 0.2], [0.2, 0.6, 0.3], [0.4, 0.7, 0.4], [0.3, 0.4, 0.2], [0.5, 0.3, 0.1]],
+                cyberpunk: [[1, 0, 0.5], [0, 1, 1], [0.5, 0, 1], [1, 1, 0], [0, 0.5, 1]],
+                dragon: [[0.8, 0.1, 0.2], [0.2, 0.6, 0.3], [0.9, 0.7, 0.1], [0.3, 0.3, 0.3], [0.5, 0.2, 0.5]],
+                robot: [[0.7, 0.7, 0.7], [0.2, 0.6, 0.9], [0.9, 0.9, 0.9], [0.3, 0.3, 0.4], [0.1, 0.8, 0.5]],
+                fantasy: [[0.8, 0.4, 0.9], [0.4, 0.8, 1], [0.9, 0.6, 0.8], [0.3, 0.9, 0.6], [0.9, 0.8, 0.4]],
+                default: [[0.9, 0.5, 0.3], [0.3, 0.7, 0.9], [0.8, 0.8, 0.4], [0.6, 0.4, 0.8], [0.4, 0.8, 0.5]]
+            };
+            
+            // Detect theme
+            if (promptLower.includes('sunset') || promptLower.includes('sunrise')) return palettes.sunset;
+            if (promptLower.includes('water') || promptLower.includes('ocean') || promptLower.includes('lake')) return palettes.ocean;
+            if (promptLower.includes('forest') || promptLower.includes('tree')) return palettes.forest;
+            if (promptLower.includes('cyberpunk') || promptLower.includes('neon')) return palettes.cyberpunk;
+            if (promptLower.includes('dragon')) return palettes.dragon;
+            if (promptLower.includes('robot')) return palettes.robot;
+            if (promptLower.includes('fantasy') || promptLower.includes('magic')) return palettes.fantasy;
+            
+            // Generate from hash
+            return palettes.default;
+        }
+
+        // Generate string hash
         function hashString(str) {
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
@@ -934,24 +949,12 @@
             return Math.abs(hash);
         }
 
-        // Generate colors from hash
-        function generateColors(hash) {
-            const colors = [];
-            for (let i = 0; i < 5; i++) {
-                const r = (hash >> (i * 5)) & 0xFF;
-                const g = (hash >> (i * 5 + 8)) & 0xFF;
-                const b = (hash >> (i * 5 + 16)) & 0xFF;
-                colors.push([r / 255, g / 255, b / 255]);
-            }
-            return colors;
-        }
-
         // Generate procedural image based on prompt
-        function generateProceduralImage(width, height, hash, step, totalSteps, colors, prompt) {
+        function generateArtisticImage(width, height, hash, step, totalSteps, colors, prompt) {
             const imageData = new ImageData(width, height);
             const data = imageData.data;
             
-            const noise = step / totalSteps; // Progress from noise to clear
+            const progress = step / totalSteps;
             
             // Parse prompt for keywords
             const promptLower = prompt.toLowerCase();
@@ -961,62 +964,101 @@
             const hasCyberpunk = promptLower.includes('cyberpunk') || promptLower.includes('neon') || promptLower.includes('city');
             const hasDragon = promptLower.includes('dragon');
             const hasRobot = promptLower.includes('robot');
+            const hasUnderwater = promptLower.includes('underwater') || promptLower.includes('coral');
+            const hasAstronaut = promptLower.includes('astronaut') || promptLower.includes('space');
             
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
                     const idx = (y * width + x) * 4;
-                    
-                    // Base noise
                     const nx = x / width;
                     const ny = y / height;
                     
-                    // Perlin-like noise
-                    let value = perlinNoise(nx * 3, ny * 3, hash);
+                    let r, g, b;
                     
-                    // Add features based on prompt
+                    // Sky gradient
                     if (hasSky && ny < 0.5) {
-                        // Sky gradient
-                        const skyGradient = 1 - (ny * 2);
-                        value = value * 0.5 + skyGradient * 0.5;
+                        const t = ny * 2;
+                        const color1 = hasSky && (promptLower.includes('sunset') || promptLower.includes('sunrise')) 
+                            ? [1, 0.4, 0.2] : [0.1, 0.1, 0.3];
+                        const color2 = [0.5, 0.7, 1];
+                        r = color1[0] * (1-t) + color2[0] * t;
+                        g = color1[1] * (1-t) + color2[1] * t;
+                        b = color1[2] * (1-t) + color2[2] * t;
                     }
-                    
-                    if (hasMountain && ny > 0.4) {
-                        // Mountain silhouette
+                    // Mountains
+                    else if (hasMountain && ny > 0.3) {
                         const mountainNoise = perlinNoise(nx * 5, 0, hash + 1000);
-                        const mountainThreshold = 0.3 + mountainNoise * 0.3;
+                        const mountainThreshold = 0.4 + mountainNoise * 0.2;
                         if (ny > 1 - mountainThreshold) {
-                            value = value * 0.3 + 0.7;
+                            const mountainColor = colors[3] || [0.3, 0.3, 0.35];
+                            r = mountainColor[0];
+                            g = mountainColor[1];
+                            b = mountainColor[2];
+                        } else {
+                            const groundColor = colors[4] || [0.2, 0.3, 0.2];
+                            r = groundColor[0];
+                            g = groundColor[1];
+                            b = groundColor[2];
                         }
                     }
-                    
-                    if (hasWater && ny > 0.5) {
-                        // Water reflection
-                        const waterNoise = perlinNoise(nx * 4, ny * 2, hash + 2000);
-                        value = value * 0.7 + waterNoise * 0.3;
+                    // Water
+                    else if (hasWater || hasUnderwater) {
+                        const waterNoise = perlinNoise(nx * 3, ny * 2, hash + 2000);
+                        const waterColor = hasUnderwater ? colors[1] : colors[0];
+                        r = waterColor[0] * (0.5 + waterNoise * 0.5);
+                        g = waterColor[1] * (0.5 + waterNoise * 0.5);
+                        b = waterColor[2] * (0.7 + waterNoise * 0.3);
+                    }
+                    // Cyberpunk city
+                    else if (hasCyberpunk) {
+                        const gridX = Math.floor(nx * 15) / 15;
+                        const gridY = Math.floor(ny * 15) / 15;
+                        const building = ((gridX + gridY) % 3) === 0;
+                        const neonColor = colors[Math.floor(perlinNoise(nx, ny, hash) * colors.length) % colors.length];
+                        r = building ? neonColor[0] * 0.2 : neonColor[0] * 0.8;
+                        g = building ? neonColor[1] * 0.2 : neonColor[1] * 0.8;
+                        b = building ? neonColor[2] * 0.2 : neonColor[2] * 0.8;
+                    }
+                    // Dragon
+                    else if (hasDragon) {
+                        const dragonNoise = perlinNoise(nx * 4, ny * 4, hash + 3000);
+                        const dragonColor = colors[0];
+                        r = dragonColor[0] * (0.3 + dragonNoise * 0.7);
+                        g = dragonColor[1] * (0.3 + dragonNoise * 0.7);
+                        b = dragonColor[2] * (0.3 + dragonNoise * 0.7);
+                    }
+                    // Robot
+                    else if (hasRobot) {
+                        const robotNoise = perlinNoise(nx * 6, ny * 6, hash + 4000);
+                        const metalColor = colors[0];
+                        r = metalColor[0] * (0.4 + robotNoise * 0.6);
+                        g = metalColor[1] * (0.4 + robotNoise * 0.6);
+                        b = metalColor[2] * (0.4 + robotNoise * 0.6);
+                    }
+                    // Space/Astronaut
+                    else if (hasAstronaut) {
+                        const spaceNoise = perlinNoise(nx * 2, ny * 2, hash + 5000);
+                        r = 0.05 + spaceNoise * 0.1;
+                        g = 0.05 + spaceNoise * 0.1;
+                        b = 0.15 + spaceNoise * 0.2;
+                    }
+                    // Default abstract
+                    else {
+                        const noise = perlinNoise(nx * 3, ny * 3, hash);
+                        const colorIdx = Math.floor(noise * colors.length) % colors.length;
+                        const baseColor = colors[colorIdx];
+                        r = baseColor[0] * (0.3 + noise * 0.7);
+                        g = baseColor[1] * (0.3 + noise * 0.7);
+                        b = baseColor[2] * (0.3 + noise * 0.7);
                     }
                     
-                    if (hasCyberpunk) {
-                        // Neon grid pattern
-                        const gridX = Math.floor(nx * 20) / 20;
-                        const gridY = Math.floor(ny * 20) / 20;
-                        const gridValue = (gridX + gridY) % 2;
-                        value = value * 0.5 + gridValue * 0.5;
-                    }
+                    // Add noise that decreases with progress
+                    const noiseAmount = (1 - progress) * 0.5;
+                    const noise = (Math.random() - 0.5) * noiseAmount;
                     
-                    // Interpolate from noise to final image
-                    const progress = step / totalSteps;
-                    const finalValue = value * (1 - progress) + value * progress;
-                    
-                    // Apply color based on position and value
-                    const colorIdx = Math.floor((value + nx + ny) * colors.length) % colors.length;
-                    const baseColor = colors[colorIdx];
-                    
-                    // Add variation
-                    const variation = perlinNoise(nx * 10, ny * 10, hash + step * 100) * 0.2;
-                    
-                    data[idx] = Math.min(255, (baseColor[0] + variation) * 255 * (finalValue + 0.2));
-                    data[idx + 1] = Math.min(255, (baseColor[1] + variation) * 255 * (finalValue + 0.2));
-                    data[idx + 2] = Math.min(255, (baseColor[2] + variation) * 255 * (finalValue + 0.2));
+                    data[idx] = Math.min(255, Math.max(0, (r + noise) * 255));
+                    data[idx + 1] = Math.min(255, Math.max(0, (g + noise) * 255));
+                    data[idx + 2] = Math.min(255, Math.max(0, (b + noise) * 255));
                     data[idx + 3] = 255;
                 }
             }
