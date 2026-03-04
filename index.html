@@ -13,6 +13,32 @@
             <p class="subtitle">Discover what you can do with WebGPU - Next-generation graphics and compute for the web</p>
         </header>
 
+        <!-- Mobile Data Warning -->
+        <div class="data-warning" style="background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(255, 191, 0, 0.2)); border: 2px solid rgba(255, 107, 107, 0.5); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; text-align: center;">
+            <h2 style="color: #ff6b6b; margin-bottom: 0.75rem; font-size: 1.5rem;">⚠️ Mobile Data Warning</h2>
+            <p style="color: #fff; font-size: 1rem; line-height: 1.6; margin-bottom: 1rem;">
+                <strong>Some demos download large AI models (1-4 GB)</strong> on first load. This can consume significant mobile data and take 1-5 minutes depending on your connection.
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-top: 1rem;">
+                <div style="background: rgba(0, 0, 0, 0.3); padding: 0.75rem 1.25rem; border-radius: 8px; border-left: 3px solid #ff6b6b;">
+                    <strong style="color: #ff6b6b;">🤖 AI Demos:</strong>
+                    <span style="color: #aaa; margin-left: 0.5rem;">1-4 GB (Qwen Coder, Image Generator, Dairy OCR)</span>
+                </div>
+                <div style="background: rgba(0, 0, 0, 0.3); padding: 0.75rem 1.25rem; border-radius: 8px; border-left: 3px solid #ffbf00;">
+                    <strong style="color: #ffbf00;">🎨 Ray Tracer:</strong>
+                    <span style="color: #aaa; margin-left: 0.5rem;">~50 MB</span>
+                </div>
+                <div style="background: rgba(0, 0, 0, 0.3); padding: 0.75rem 1.25rem; border-radius: 8px; border-left: 3px solid #00ff88;">
+                    <strong style="color: #00ff88;">🔺 Basic Demos:</strong>
+                    <span style="color: #aaa; margin-left: 0.5rem;">< 1 MB</span>
+                </div>
+            </div>
+            <p style="color: #888; font-size: 0.85rem; margin-top: 1rem;">
+                ✅ Models are cached after first load - no repeated downloads<br>
+                📶 Use WiFi for best experience with AI demos
+            </p>
+        </div>
+
         <section class="intro">
             <h2>What is WebGPU?</h2>
             <p>WebGPU is a modern web API that provides access to GPU capabilities for both graphics rendering and general-purpose computation. Unlike WebGL, WebGPU offers:</p>
