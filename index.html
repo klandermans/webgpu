@@ -17,25 +17,26 @@
         <div class="data-warning" style="background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(255, 191, 0, 0.2)); border: 2px solid rgba(255, 107, 107, 0.5); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; text-align: center;">
             <h2 style="color: #ff6b6b; margin-bottom: 0.75rem; font-size: 1.5rem;">⚠️ Mobile Data Warning</h2>
             <p style="color: #fff; font-size: 1rem; line-height: 1.6; margin-bottom: 1rem;">
-                <strong>Some demos download large AI models (1-4 GB)</strong> on first load. This can consume significant mobile data and take 1-5 minutes depending on your connection.
+                <strong>AI demos download large models (1-4 GB)</strong> on first load. This can consume significant mobile data and take 1-5 minutes depending on your connection.
             </p>
             <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-top: 1rem;">
                 <div style="background: rgba(0, 0, 0, 0.3); padding: 0.75rem 1.25rem; border-radius: 8px; border-left: 3px solid #ff6b6b;">
-                    <strong style="color: #ff6b6b;">🤖 AI Demos:</strong>
-                    <span style="color: #aaa; margin-left: 0.5rem;">1-4 GB (Qwen Coder, Image Generator, Dairy OCR)</span>
+                    <strong style="color: #ff6b6b;">🤖 Local AI Demos:</strong>
+                    <span style="color: #aaa; margin-left: 0.5rem;">1-4 GB (Qwen Coder, Dairy OCR)</span>
+                </div>
+                <div style="background: rgba(0, 0, 0, 0.3); padding: 0.75rem 1.25rem; border-radius: 8px; border-left: 3px solid #58a6ff;">
+                    <strong style="color: #58a6ff;">☁️ Cloud AI Demos:</strong>
+                    <span style="color: #aaa; margin-left: 0.5rem;">No download (API key required)</span>
                 </div>
                 <div style="background: rgba(0, 0, 0, 0.3); padding: 0.75rem 1.25rem; border-radius: 8px; border-left: 3px solid #ffbf00;">
                     <strong style="color: #ffbf00;">🎨 Ray Tracer:</strong>
                     <span style="color: #aaa; margin-left: 0.5rem;">~50 MB</span>
                 </div>
-                <div style="background: rgba(0, 0, 0, 0.3); padding: 0.75rem 1.25rem; border-radius: 8px; border-left: 3px solid #00ff88;">
-                    <strong style="color: #00ff88;">🔺 Basic Demos:</strong>
-                    <span style="color: #aaa; margin-left: 0.5rem;">< 1 MB</span>
-                </div>
             </div>
             <p style="color: #888; font-size: 0.85rem; margin-top: 1rem;">
                 ✅ Models are cached after first load - no repeated downloads<br>
-                📶 Use WiFi for best experience with AI demos
+                📶 Use WiFi for best experience with local AI demos<br>
+                🔑 Cloud AI demos need free Hugging Face API key
             </p>
         </div>
 
@@ -51,64 +52,9 @@
         </section>
 
         <section class="examples">
-            <h2>Interactive Examples</h2>
+            <h2>🚀 AI-Powered WebGPU Demos</h2>
+            <p style="color: #aaa; margin-bottom: 1.5rem;">Advanced demos combining WebGPU graphics with artificial intelligence - all running in your browser!</p>
             <div class="example-grid">
-                <div class="example-card" data-example="triangle">
-                    <div class="card-icon">🔺</div>
-                    <h3>Basic Triangle</h3>
-                    <p>Render a simple colored triangle using WebGPU</p>
-                    <span class="difficulty beginner">Beginner</span>
-                    <a href="templates/examples/triangle.html" class="btn">Try Demo</a>
-                </div>
-
-                <div class="example-card" data-example="compute">
-                    <div class="card-icon">⚡</div>
-                    <h3>Compute Shader</h3>
-                    <p>Use compute shaders for parallel calculations</p>
-                    <span class="difficulty intermediate">Intermediate</span>
-                    <a href="templates/examples/compute.html" class="btn">Try Demo</a>
-                </div>
-
-                <div class="example-card" data-example="particles">
-                    <div class="card-icon">✨</div>
-                    <h3>Particle System</h3>
-                    <p>Simulate thousands of particles with GPU acceleration</p>
-                    <span class="difficulty intermediate">Intermediate</span>
-                    <a href="templates/examples/particles.html" class="btn">Try Demo</a>
-                </div>
-
-                <div class="example-card" data-example="image-filter">
-                    <div class="card-icon">🎨</div>
-                    <h3>Image Filter</h3>
-                    <p>Apply real-time image filters using fragment shaders</p>
-                    <span class="difficulty beginner">Beginner</span>
-                    <a href="templates/examples/image-filter.html" class="btn">Try Demo</a>
-                </div>
-
-                <div class="example-card" data-example="matrix-math">
-                    <div class="card-icon">🔢</div>
-                    <h3>Matrix Multiplication</h3>
-                    <p>Accelerate matrix operations with compute shaders</p>
-                    <span class="difficulty advanced">Advanced</span>
-                    <a href="templates/examples/matrix-math.html" class="btn">Try Demo</a>
-                </div>
-
-                <div class="example-card" data-example="llm-inference">
-                    <div class="card-icon">🤖</div>
-                    <h3>LLM Inference</h3>
-                    <p>Run neural network inference for language models on GPU</p>
-                    <span class="difficulty advanced">Advanced</span>
-                    <a href="templates/examples/llm-inference.html" class="btn">Try Demo</a>
-                </div>
-
-                <div class="example-card" data-example="qwen-chat">
-                    <div class="card-icon">💬</div>
-                    <h3>Qwen Chat</h3>
-                    <p>Full chat interface with Qwen LLM running entirely in your browser</p>
-                    <span class="difficulty advanced">Advanced</span>
-                    <a href="templates/examples/qwen-chat.html" class="btn">Try Demo</a>
-                </div>
-
                 <div class="example-card" data-example="ai-raytracer">
                     <div class="card-icon">🤖</div>
                     <h3>AI Ray Tracer</h3>
@@ -128,7 +74,7 @@
                 <div class="example-card" data-example="ai-image-generator">
                     <div class="card-icon">🎨</div>
                     <h3>AI Image Generator</h3>
-                    <p>Stable Diffusion text-to-image in browser - WebGPU accelerated</p>
+                    <p>Stable Diffusion XL text-to-image in browser - real AI art generation</p>
                     <span class="difficulty advanced">Advanced</span>
                     <a href="templates/examples/ai-image-generator.html" class="btn">Try Demo</a>
                 </div>
@@ -139,6 +85,22 @@
                     <p>Ear tag recognition + health assessment with vision AI</p>
                     <span class="difficulty advanced">Advanced</span>
                     <a href="templates/examples/dairy-ocr.html" class="btn">Try Demo</a>
+                </div>
+
+                <div class="example-card" data-example="qwen-chat">
+                    <div class="card-icon">💬</div>
+                    <h3>Qwen Chat</h3>
+                    <p>Full chat interface with Qwen LLM running entirely in your browser</p>
+                    <span class="difficulty advanced">Advanced</span>
+                    <a href="templates/examples/qwen-chat.html" class="btn">Try Demo</a>
+                </div>
+
+                <div class="example-card" data-example="llm-inference">
+                    <div class="card-icon">🧠</div>
+                    <h3>LLM Inference</h3>
+                    <p>Run neural network inference for language models on GPU</p>
+                    <span class="difficulty advanced">Advanced</span>
+                    <a href="templates/examples/llm-inference.html" class="btn">Try Demo</a>
                 </div>
             </div>
         </section>
