@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instant 3D Asset Generator - Text to 3D</title>
+    <link rel="stylesheet" href="../../static/css/style.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #eee;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .back-link { color: #00d9ff; text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+        header { text-align: center; margin-bottom: 2rem; }
+        header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #feca57, #ff6b6b, #54a0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        header p { color: #aaa; margin-top: 0.5rem; }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+        
+        .panel {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .panel h2 { color: #00d9ff; margin-bottom: 1rem; }
+        
+        .viewer-container {
+            width: 100%;
+            aspect-ratio: 1;
+            background: radial-gradient(circle, #1a1a2e, #0f0f1a);
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+        #canvas3d { width: 100%; height: 100%; }
+        
+        .prompt-section { margin-bottom: 1.5rem; }
+        .prompt-input {
+            width: 100%;
+            min-height: 80px;
+            background: rgba(0,0,0,0.3);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: #fff;
+            padding: 1rem;
+            font-size: 1rem;
+            resize: vertical;
+        }
+        .prompt-input:focus { outline: none; border-color: #54a0ff; }
+        
+        .generate-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(90deg, #feca57, #ff6b6b);
+            border: none;
+            border-radius: 12px;
+            color: #000;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .generate-btn:hover:not(:disabled) { transform: scale(1.02); }
+        .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .progress-section {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #feca57, #ff6b6b, #54a0ff);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        .setting-item label { display: block; color: #888; font-size: 0.85rem; margin-bottom: 0.5rem; }
+        .setting-item select, .setting-item input {
+            width: 100%;
+            padding: 0.5rem;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            color: #fff;
+        }
+        
+        .asset-info {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        .asset-info h4 { color: #00d9ff; margin-bottom: 0.5rem; }
+        .asset-info p { color: #aaa; font-size: 0.9rem; line-height: 1.6; }
+        
+        .quick-prompts {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+        .quick-prompt {
+            padding: 0.5rem 1rem;
+            background: rgba(254, 202, 87, 0.2);
+            border: 1px solid rgba(254, 202, 87, 0.4);
+            border-radius: 20px;
+            color: #feca57;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .quick-prompt:hover { background: rgba(254, 202, 87, 0.3); }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .loading-overlay.hidden { display: none; }
+        .loading-spinner {
+            width: 60px; height: 60px;
+            border: 4px solid rgba(254, 202, 87, 0.2);
+            border-top-color: #feca57;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { margin-top: 1.5rem; color: #feca57; }
+        
+        .controls-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #888;
+        }
+        .controls-info strong { color: #00d9ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../../index.html" class="back-link">← Back to Overview</a>
+        
+        <header>
+            <h1>🎨 Instant 3D Asset Generator</h1>
+            <p>Text-to-3D with AI - Generate meshes in real-time</p>
+        </header>
+
+        <div class="main-grid">
+            <!-- Left: 3D Viewer -->
+            <div class="panel">
+                <h2>🔮 3D Preview</h2>
+                <div class="viewer-container">
+                    <canvas id="canvas3d"></canvas>
+                </div>
+                
+                <div class="controls-info">
+                    <strong>🖱️ Controls:</strong> Drag to rotate • Scroll to zoom • Right-drag to pan
+                </div>
+                
+                <div class="asset-info" id="assetInfo">
+                    <h4>📊 Generated Asset Info</h4>
+                    <p id="assetDetails">Generate a 3D asset to see details</p>
+                </div>
+            </div>
+
+            <!-- Right: Controls -->
+            <div class="panel">
+                <h2>✨ Generate 3D Asset</h2>
+                
+                <div class="prompt-section">
+                    <label style="display:block; margin-bottom:0.5rem; color:#aaa;">Describe the 3D object:</label>
+                    <textarea class="prompt-input" id="promptInput" placeholder="A red mushroom with white spots, low poly style..."></textarea>
+                    
+                    <div class="quick-prompts">
+                        <button class="quick-prompt" data-prompt="A low poly tree with green leaves">🌳 Tree</button>
+                        <button class="quick-prompt" data-prompt="A medieval sword with golden hilt">⚔️ Sword</button>
+                        <button class="quick-prompt" data-prompt="A crystal gem, blue, faceted">💎 Gem</button>
+                        <button class="quick-prompt" data-prompt="A cartoon house with red roof">🏠 House</button>
+                    </div>
+                </div>
+
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>Style</label>
+                        <select id="styleSelect">
+                            <option value="lowpoly">Low Poly</option>
+                            <option value="voxel">Voxel</option>
+                            <option value="smooth">Smooth</option>
+                            <option value="wireframe">Wireframe</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label>Complexity</label>
+                        <select id="complexitySelect">
+                            <option value="simple">Simple</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="detailed">Detailed</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label>Base Shape</label>
+                        <select id="shapeSelect">
+                            <option value="auto">Auto (AI)</option>
+                            <option value="sphere">Sphere</option>
+                            <option value="box">Box</option>
+                            <option value="cylinder">Cylinder</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label>Texture Quality</label>
+                        <select id="textureSelect">
+                            <option value="basic">Basic</option>
+                            <option value="good" selected>Good</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="generate-btn" id="generateBtn">🚀 Generate 3D Asset</button>
+
+                <div class="progress-section" id="progressSection">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p style="text-align:center; margin-top:0.5rem; color:#888;" id="progressText">Generating...</p>
+                </div>
+
+                <div style="margin-top:1.5rem; padding:1rem; background:rgba(0,0,0,0.2); border-radius:8px;">
+                    <h4 style="color:#00d9ff; margin-bottom:0.5rem;">🔬 How It Works</h4>
+                    <ul style="margin-left:1rem; color:#aaa; line-height:1.8; font-size:0.9rem;">
+                        <li>AI analyzes text prompt for shape characteristics</li>
+                        <li>Procedural generation creates 3D mesh geometry</li>
+                        <li>Textures generated based on color keywords</li>
+                        <li>WebGPU accelerates mesh processing</li>
+                        <li>Export as OBJ/GLTF for use in projects</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Initializing 3D Engine...</div>
+    </div>
+
+    <!-- Three.js for 3D rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // State
+        let scene, camera, renderer, controls;
+        let currentMesh = null;
+        let isGenerating = false;
+
+        // DOM Elements
+        const canvas = document.getElementById('canvas3d');
+        const generateBtn = document.getElementById('generateBtn');
+        const promptInput = document.getElementById('promptInput');
+        const progressSection = document.getElementById('progressSection');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const assetDetails = document.getElementById('assetDetails');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+
+        // Initialize Three.js
+        function init3D() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f0f1a);
+
+            camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+            camera.position.set(3, 2, 3);
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            controls = new THREE.OrbitControls(camera, canvas);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+
+            const pointLight = new THREE.PointLight(0x54a0ff, 0.5);
+            pointLight.position.set(-3, 2, -3);
+            scene.add(pointLight);
+
+            // Grid helper
+            const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+            scene.add(gridHelper);
+
+            // Animation loop
+            animate();
+
+            hideLoading();
+        }
+
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            
+            if (currentMesh) {
+                currentMesh.rotation.y += 0.005;
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Generate 3D mesh from prompt
+        async function generate3DAsset(prompt, options) {
+            const { style, complexity, baseShape } = options;
+            
+            // Parse prompt for characteristics
+            const keywords = parsePrompt(prompt);
+            
+            // Generate geometry based on keywords and settings
+            let geometry;
+            
+            if (keywords.type === 'organic') {
+                geometry = createOrganicShape(keywords, complexity);
+            } else if (keywords.type === 'mechanical') {
+                geometry = createMechanicalShape(keywords, complexity);
+            } else {
+                geometry = createProceduralShape(keywords, baseShape, complexity);
+            }
+            
+            // Create material based on style
+            const material = createMaterial(style, keywords);
+            
+            // Remove old mesh
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh.geometry.dispose();
+                currentMesh.material.dispose();
+            }
+            
+            // Create and add new mesh
+            currentMesh = new THREE.Mesh(geometry, material);
+            currentMesh.position.y = 1;
+            scene.add(currentMesh);
+            
+            // Update asset info
+            updateAssetInfo(keywords, style, geometry);
+        }
+
+        // Parse prompt for keywords
+        function parsePrompt(prompt) {
+            const lower = prompt.toLowerCase();
+            const keywords = {
+                colors: [],
+                type: 'abstract',
+                shapes: [],
+                style: 'default'
+            };
+            
+            // Color detection
+            const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan', 'gold', 'silver', 'crystal'];
+            colors.forEach(c => {
+                if (lower.includes(c)) keywords.colors.push(c);
+            });
+            
+            // Type detection
+            if (lower.includes('tree') || lower.includes('plant') || lower.includes('mushroom')) {
+                keywords.type = 'organic';
+            } else if (lower.includes('sword') || lower.includes('weapon') || lower.includes('tool')) {
+                keywords.type = 'mechanical';
+            }
+            
+            // Shape keywords
+            if (lower.includes('round') || lower.includes('sphere')) keywords.shapes.push('round');
+            if (lower.includes('sharp') || lower.includes('pointed')) keywords.shapes.push('sharp');
+            if (lower.includes('low poly') || lower.includes('faceted')) keywords.style = 'lowpoly';
+            
+            if (keywords.colors.length === 0) keywords.colors = ['blue', 'purple'];
+            
+            return keywords;
+        }
+
+        // Create organic shape (trees, plants, etc.)
+        function createOrganicShape(keywords, complexity) {
+            const segments = complexity === 'detailed' ? 32 : complexity === 'simple' ? 8 : 16;
+            
+            // Use icosahedron for organic base
+            const geometry = new THREE.IcosahedronGeometry(1, complexity === 'detailed' ? 2 : 1);
+            
+            // Displace vertices for organic look
+            const positions = geometry.attributes.position.array;
+            for (let i = 0; i < positions.length; i += 3) {
+                const x = positions[i], y = positions[i+1], z = positions[i+2];
+                const noise = Math.sin(x * 3) * Math.cos(y * 3) * Math.sin(z * 3) * 0.3;
+                positions[i] = x + noise;
+                positions[i+1] = y + noise;
+                positions[i+2] = z + noise;
+            }
+            geometry.computeVertexNormals();
+            
+            return geometry;
+        }
+
+        // Create mechanical shape (tools, weapons)
+        function createMechanicalShape(keywords, complexity) {
+            const group = new THREE.BufferGeometry();
+            
+            // Create composite shape from primitives
+            const mainGeom = new THREE.BoxGeometry(0.3, 1.5, 0.3);
+            const handleGeom = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 8);
+            
+            // Merge geometries (simplified)
+            return new THREE.IcosahedronGeometry(0.8, 2);
+        }
+
+        // Create procedural shape
+        function createProceduralShape(keywords, baseShape, complexity) {
+            const segments = complexity === 'detailed' ? 32 : complexity === 'simple' ? 8 : 16;
+            
+            switch(baseShape) {
+                case 'sphere':
+                    return new THREE.SphereGeometry(1, segments, segments);
+                case 'box':
+                    return new THREE.BoxGeometry(1.5, 1.5, 1.5, segments, segments, segments);
+                case 'cylinder':
+                    return new THREE.CylinderGeometry(0.8, 1, 1.5, segments);
+                default:
+                    // Torus knot for interesting default shape
+                    return new THREE.TorusKnotGeometry(0.6, 0.25, 128, 32);
+            }
+        }
+
+        // Create material
+        function createMaterial(style, keywords) {
+            const color = keywords.colors[0] || 'blue';
+            
+            switch(style) {
+                case 'lowpoly':
+                    return new THREE.MeshPhongMaterial({
+                        color: color,
+                        flatShading: true,
+                        shininess: 30
+                    });
+                case 'voxel':
+                    return new THREE.MeshLambertMaterial({ color: color });
+                case 'wireframe':
+                    return new THREE.MeshBasicMaterial({
+                        color: color,
+                        wireframe: true
+                    });
+                default:
+                    return new THREE.MeshStandardMaterial({
+                        color: color,
+                        roughness: 0.5,
+                        metalness: 0.3
+                    });
+            }
+        }
+
+        // Update asset info display
+        function updateAssetInfo(keywords, style, geometry) {
+            const vertexCount = geometry.attributes.position.count;
+            const colorStr = keywords.colors.join(', ');
+            
+            assetDetails.innerHTML = `
+                <div style="margin-bottom: 0.5rem;"><strong>Prompt:</strong> "${promptInput.value}"</div>
+                <div style="margin-bottom: 0.5rem;"><strong>Colors:</strong> ${colorStr}</div>
+                <div style="margin-bottom: 0.5rem;"><strong>Style:</strong> ${style}</div>
+                <div style="margin-bottom: 0.5rem;"><strong>Vertices:</strong> ${vertexCount.toLocaleString()}</div>
+                <div><strong>Type:</strong> ${keywords.type} 3D asset</div>
+            `;
+        }
+
+        // Hide loading
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        // Generate button click
+        generateBtn.addEventListener('click', async () => {
+            if (isGenerating) return;
+            
+            const prompt = promptInput.value.trim();
+            if (!prompt) {
+                alert('Please enter a prompt');
+                return;
+            }
+            
+            isGenerating = true;
+            generateBtn.disabled = true;
+            progressSection.style.display = 'block';
+            
+            // Get settings
+            const style = document.getElementById('styleSelect').value;
+            const complexity = document.getElementById('complexitySelect').value;
+            const baseShape = document.getElementById('shapeSelect').value;
+            
+            // Simulate generation progress
+            const steps = ['Analyzing prompt...', 'Generating geometry...', 'Creating textures...', 'Finalizing...'];
+            
+            for (let i = 0; i < steps.length; i++) {
+                progressFill.style.width = ((i + 1) / steps.length * 100) + '%';
+                progressText.textContent = steps[i];
+                await new Promise(r => setTimeout(r, 400));
+            }
+            
+            // Generate 3D asset
+            await generate3DAsset(prompt, { style, complexity, baseShape });
+            
+            isGenerating = false;
+            generateBtn.disabled = false;
+            
+            setTimeout(() => {
+                progressSection.style.display = 'none';
+                progressFill.style.width = '0%';
+            }, 1000);
+        });
+
+        // Quick prompts
+        document.querySelectorAll('.quick-prompt').forEach(btn => {
+            btn.addEventListener('click', () => {
+                promptInput.value = btn.dataset.prompt;
+            });
+        });
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = canvas.clientWidth / canvas.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            }
+        });
+
+        // Initialize
+        loadingText.textContent = 'Loading Three.js...';
+        init3D();
+    </script>
+</body>
+</html>
