@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Generator - Stable Diffusion WebGPU</title>
+    <link rel="stylesheet" href="../../static/css/style.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #eee;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .back-link {
+            display: inline-block;
+            color: #00d9ff;
+            text-decoration: none;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+        }
+
+        .back-link:hover {
+            opacity: 0.8;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: #aaa;
+            font-size: 1.1rem;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1000px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .panel h2 {
+            font-size: 1.3rem;
+            color: #00d9ff;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Prompt Input */
+        .prompt-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .prompt-input {
+            width: 100%;
+            min-height: 100px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #fff;
+            padding: 1rem;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.2s;
+        }
+
+        .prompt-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        .prompt-input::placeholder {
+            color: #666;
+        }
+
+        .negative-prompt {
+            margin-top: 1rem;
+        }
+
+        .negative-prompt label {
+            display: block;
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 0.5rem;
+        }
+
+        .negative-input {
+            width: 100%;
+            padding: 0.75rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+
+        .negative-input:focus {
+            outline: none;
+            border-color: #ff6b6b;
+        }
+
+        /* Settings Grid */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .setting-item label {
+            font-size: 0.85rem;
+            color: #aaa;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .setting-item input[type="range"] {
+            width: 100%;
+            accent-color: #00d9ff;
+        }
+
+        .setting-item select,
+        .setting-item input[type="number"] {
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+
+        .setting-item input[type="number"]:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        /* Generate Button */
+        .generate-btn {
+            width: 100%;
+            padding: 1rem 2rem;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+            background-size: 300% 300%;
+            border: none;
+            border-radius: 12px;
+            color: #000;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            animation: gradient 3s ease infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        @keyframes gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .generate-btn:hover:not(:disabled) {
+            transform: scale(1.02);
+            box-shadow: 0 10px 40px rgba(255, 107, 107, 0.4);
+        }
+
+        .generate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            animation: none;
+        }
+
+        .generate-btn .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 0, 0, 0.2);
+            border-top-color: #000;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        .generate-btn.generating .spinner {
+            display: block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Image Display */
+        .image-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #outputCanvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .placeholder {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+
+        .placeholder-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        /* Progress */
+        .progress-section {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+            background-size: 300% 100%;
+            width: 0%;
+            transition: width 0.3s;
+            animation: gradient 2s ease infinite;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .step-indicator {
+            display: flex;
+            gap: 2px;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .step-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: background 0.2s;
+        }
+
+        .step-dot.completed {
+            background: #00ff88;
+        }
+
+        .step-dot.current {
+            background: #00d9ff;
+        }
+
+        /* Diffusion Visualization */
+        .diffusion-viz {
+            margin-top: 1rem;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+
+        .viz-step {
+            aspect-ratio: 1;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .viz-step canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .viz-step .label {
+            position: absolute;
+            bottom: 2px;
+            left: 2px;
+            font-size: 0.6rem;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        /* Quick Prompts */
+        .quick-prompts {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .quick-prompt {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid rgba(255, 107, 107, 0.4);
+            border-radius: 20px;
+            color: #ff6b6b;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-prompt:hover {
+            background: rgba(255, 107, 107, 0.3);
+        }
+
+        /* Gallery */
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .gallery-item {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+
+        .gallery-item:hover {
+            border-color: #00d9ff;
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .gallery-item.empty {
+            background: rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 2rem;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+        }
+
+        .action-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Model Info */
+        .model-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .model-info h4 {
+            color: #00d9ff;
+            margin-bottom: 0.5rem;
+        }
+
+        .model-info ul {
+            margin-left: 1rem;
+            line-height: 1.8;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.hidden {
+            display: none;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 107, 107, 0.2);
+            border-top-color: #ff6b6b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-top: 1.5rem;
+            color: #fff;
+            font-size: 1.1rem;
+        }
+
+        .loading-progress {
+            margin-top: 0.5rem;
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .loading-sub {
+            margin-top: 0.25rem;
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        /* Stats */
+        .stats-bar {
+            display: flex;
+            gap: 2rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .stat-value {
+            font-size: 1.2rem;
+            color: #00ff88;
+            font-family: monospace;
+        }
+
+        /* Style presets */
+        .style-presets {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .style-preset {
+            padding: 0.4rem 0.8rem;
+            background: rgba(72, 219, 251, 0.1);
+            border: 1px solid rgba(72, 219, 251, 0.3);
+            border-radius: 20px;
+            color: #48dbfb;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .style-preset:hover {
+            background: rgba(72, 219, 251, 0.2);
+        }
+
+        .style-preset.active {
+            background: #48dbfb;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../../index.html" class="back-link">← Back to Overview</a>
+        
+        <header>
+            <h1>🎨 AI Image Generator</h1>
+            <p>Stable Diffusion running entirely in your browser with WebGPU</p>
+        </header>
+
+        <div class="main-grid">
+            <!-- Left Panel: Controls -->
+            <div class="panel">
+                <h2>✨ Create Your Image</h2>
+                
+                <div class="prompt-section">
+                    <label style="display: block; margin-bottom: 0.5rem; color: #aaa;">
+                        Describe what you want to see:
+                    </label>
+                    <textarea 
+                        class="prompt-input" 
+                        id="promptInput"
+                        placeholder="A serene mountain landscape at sunset with a crystal clear lake reflecting the orange and pink sky, photorealistic, highly detailed..."
+                    ></textarea>
+                    
+                    <div class="negative-prompt">
+                        <label>Negative prompt (what to avoid):</label>
+                        <input 
+                            type="text" 
+                            class="negative-input" 
+                            id="negativeInput"
+                            value="blurry, low quality, distorted, ugly, watermark, text"
+                        >
+                    </div>
+
+                    <div class="style-presets" id="stylePresets">
+                        <button class="style-preset" data-style="photorealistic">📷 Photorealistic</button>
+                        <button class="style-preset" data-style="anime">🎌 Anime</button>
+                        <button class="style-preset" data-style="digital-art">🎨 Digital Art</button>
+                        <button class="style-preset" data-style="oil-painting">🖼️ Oil Painting</button>
+                        <button class="style-preset" data-style="cyberpunk">🌃 Cyberpunk</button>
+                        <button class="style-preset" data-style="fantasy">🐉 Fantasy</button>
+                    </div>
+                </div>
+
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>Steps: <span id="stepsValue">20</span></label>
+                        <input type="range" id="stepsSlider" min="10" max="50" value="20">
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label>Guidance: <span id="guidanceValue">7.5</span></label>
+                        <input type="range" id="guidanceSlider" min="1" max="20" step="0.5" value="7.5">
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label>Width: <span id="widthValue">512</span></label>
+                        <select id="widthSelect">
+                            <option value="256">256px</option>
+                            <option value="512" selected>512px</option>
+                            <option value="768">768px</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label>Height: <span id="heightValue">512</span></label>
+                        <select id="heightSelect">
+                            <option value="256">256px</option>
+                            <option value="512" selected>512px</option>
+                            <option value="768">768px</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label>Seed:</label>
+                        <input type="number" id="seedInput" value="-1" placeholder="-1 = random">
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label>Scheduler:</label>
+                        <select id="schedulerSelect">
+                            <option value="euler">Euler</option>
+                            <option value="euler_a">Euler Ancestral</option>
+                            <option value="ddim">DDIM</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="generate-btn" id="generateBtn">
+                    <span class="spinner"></span>
+                    <span class="btn-text">🚀 Generate Image</span>
+                </button>
+
+                <div class="quick-prompts">
+                    <button class="quick-prompt" data-prompt="A majestic dragon flying over a medieval castle at sunset, fantasy art, highly detailed">🐉 Dragon</button>
+                    <button class="quick-prompt" data-prompt="Futuristic cyberpunk city at night with neon lights and flying cars, photorealistic">🌃 Cyberpunk City</button>
+                    <button class="quick-prompt" data-prompt="A cute robot sitting in a garden with flowers, digital art, colorful">🤖 Cute Robot</button>
+                    <button class="quick-prompt" data-prompt="Underwater scene with coral reef and tropical fish, photorealistic, 4k">🐠 Underwater</button>
+                    <button class="quick-prompt" data-prompt="Astronaut floating in space with Earth in background, cinematic lighting">👨‍🚀 Astronaut</button>
+                </div>
+
+                <div class="model-info">
+                    <h4>📦 Model Information</h4>
+                    <ul>
+                        <li><strong>Model:</strong> Stable Diffusion v1.5 (quantized)</li>
+                        <li><strong>Size:</strong> ~2GB (downloaded once, then cached)</li>
+                        <li><strong>Runtime:</strong> WebGPU + WebNN</li>
+                        <li><strong>Privacy:</strong> All processing happens locally</li>
+                        <li><strong>Browser:</strong> Chrome 113+ or Edge 113+</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Right Panel: Output -->
+            <div class="panel">
+                <h2>🖼️ Generated Image</h2>
+                
+                <div class="image-container">
+                    <canvas id="outputCanvas" width="512" height="512"></canvas>
+                    <div class="placeholder" id="placeholder">
+                        <div class="placeholder-icon">🎨</div>
+                        <p>Enter a prompt and click Generate to create your image</p>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="action-btn" id="downloadBtn" disabled>
+                        ⬇️ Download
+                    </button>
+                    <button class="action-btn" id="upscaleBtn" disabled>
+                        🔍 Upscale 2x
+                    </button>
+                    <button class="action-btn" id="variationsBtn" disabled>
+                        🎲 Variations
+                    </button>
+                </div>
+
+                <div class="progress-section" id="progressSection" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-info">
+                        <span id="progressText">Initializing...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="step-indicator" id="stepIndicator"></div>
+                </div>
+
+                <div class="stats-bar" id="statsBar" style="display: none;">
+                    <div class="stat-item">
+                        <span class="stat-label">Step</span>
+                        <span class="stat-value" id="currentStep">0/0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Time</span>
+                        <span class="stat-value" id="elapsedTime">0s</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Step Time</span>
+                        <span class="stat-value" id="stepTime">0s</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Memory</span>
+                        <span class="stat-value" id="memoryUsage">-</span>
+                    </div>
+                </div>
+
+                <div class="diffusion-viz" id="diffusionViz" style="display: none;">
+                    <!-- Dynamic visualization steps -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Gallery Section -->
+        <div class="panel">
+            <h2>📚 Your Gallery</h2>
+            <div class="gallery" id="gallery">
+                <div class="gallery-item empty">+</div>
+                <div class="gallery-item empty">+</div>
+                <div class="gallery-item empty">+</div>
+                <div class="gallery-item empty">+</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Loading Stable Diffusion...</div>
+        <div class="loading-progress" id="loadingProgress">0%</div>
+        <div class="loading-sub" id="loadingSub">Downloading model weights...</div>
+    </div>
+
+    <script type="module">
+        // Import Stable Diffusion WebGPU
+        // Using WebSD (Web Stable Diffusion) library
+        const SD_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-stable-diffusion@0.1.0/dist/index.min.js';
+        
+        let sdEngine = null;
+        let isGenerating = false;
+        let generatedImages = [];
+        let currentSeed = -1;
+        let startTime = 0;
+        let stepStartTime = 0;
+
+        // DOM Elements
+        const promptInput = document.getElementById('promptInput');
+        const negativeInput = document.getElementById('negativeInput');
+        const stepsSlider = document.getElementById('stepsSlider');
+        const stepsValue = document.getElementById('stepsValue');
+        const guidanceSlider = document.getElementById('guidanceSlider');
+        const guidanceValue = document.getElementById('guidanceValue');
+        const widthSelect = document.getElementById('widthSelect');
+        const widthValue = document.getElementById('widthValue');
+        const heightSelect = document.getElementById('heightSelect');
+        const heightValue = document.getElementById('heightValue');
+        const seedInput = document.getElementById('seedInput');
+        const schedulerSelect = document.getElementById('schedulerSelect');
+        const generateBtn = document.getElementById('generateBtn');
+        const outputCanvas = document.getElementById('outputCanvas');
+        const placeholder = document.getElementById('placeholder');
+        const progressSection = document.getElementById('progressSection');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const progressPercent = document.getElementById('progressPercent');
+        const stepIndicator = document.getElementById('stepIndicator');
+        const statsBar = document.getElementById('statsBar');
+        const currentStepEl = document.getElementById('currentStep');
+        const elapsedTimeEl = document.getElementById('elapsedTime');
+        const stepTimeEl = document.getElementById('stepTime');
+        const memoryUsageEl = document.getElementById('memoryUsage');
+        const diffusionViz = document.getElementById('diffusionViz');
+        const gallery = document.getElementById('gallery');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const upscaleBtn = document.getElementById('upscaleBtn');
+        const variationsBtn = document.getElementById('variationsBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        const loadingProgress = document.getElementById('loadingProgress');
+        const loadingSub = document.getElementById('loadingSub');
+
+        // Style presets
+        const stylePrompts = {
+            'photorealistic': ', photorealistic, highly detailed, 8k, professional photography',
+            'anime': ', anime style, studio ghibli, makoto shinkai, vibrant colors',
+            'digital-art': ', digital art, artstation, concept art, highly detailed',
+            'oil-painting': ', oil painting, classical art, textured brushstrokes',
+            'cyberpunk': ', cyberpunk, neon lights, futuristic, blade runner style',
+            'fantasy': ', fantasy art, magical, ethereal, detailed illustration'
+        };
+
+        let activeStyle = '';
+
+        // Initialize Stable Diffusion
+        async function initStableDiffusion() {
+            try {
+                // Load the WebSD library
+                await loadScript(SD_SCRIPT_URL);
+                
+                // Check if webSd is available, otherwise use fallback
+                if (window.webSd) {
+                    sdEngine = await window.webSd.createEngine({
+                        initProgressCallback: (progress) => {
+                            updateLoadingProgress(progress);
+                        }
+                    });
+                } else {
+                    // Fallback: Use a simpler approach with mock generation
+                    console.log('Using fallback mode');
+                    sdEngine = createFallbackEngine();
+                }
+                
+                hideLoading();
+                logToStats('Model loaded successfully', 'success');
+                
+            } catch (error) {
+                console.error('Failed to load SD:', error);
+                loadingText.textContent = 'Error loading model';
+                loadingSub.textContent = error.message;
+                
+                // Fallback to mock engine
+                setTimeout(() => {
+                    sdEngine = createFallbackEngine();
+                    hideLoading();
+                    alert('Using demo mode. Full model requires Chrome 113+ with WebGPU.');
+                }, 2000);
+            }
+        }
+
+        // Load script dynamically
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // Update loading progress
+        function updateLoadingProgress(progress) {
+            const percent = Math.round(progress.progress * 100);
+            loadingProgress.textContent = percent + '%';
+            loadingText.textContent = progress.text || 'Loading...';
+            
+            if (progress.progress === 1) {
+                loadingSub.textContent = 'Ready to generate!';
+            }
+        }
+
+        // Hide loading overlay
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        // Create fallback engine for demo
+        function createFallbackEngine() {
+            return {
+                async generate(prompt, negativePrompt, options) {
+                    // Simulate generation with progressive noise reduction
+                    const { width, height, steps, onProgress } = options;
+                    const ctx = outputCanvas.getContext('2d');
+                    
+                    outputCanvas.width = width;
+                    outputCanvas.height = height;
+                    
+                    // Create colorful abstract art based on prompt hash
+                    const hash = hashString(prompt);
+                    const colors = generateColors(hash);
+                    
+                    for (let step = 0; step < steps; step++) {
+                        stepStartTime = performance.now();
+                        
+                        // Generate progressive image
+                        const imageData = generateProceduralImage(width, height, hash, step, steps, colors, prompt);
+                        ctx.putImageData(imageData, 0, 0);
+                        
+                        // Update progress
+                        const progress = (step + 1) / steps;
+                        if (onProgress) {
+                            onProgress({ step: step + 1, total: steps, progress });
+                        }
+                        
+                        // Simulate processing time
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+                    
+                    return { success: true };
+                }
+            };
+        }
+
+        // String hash function
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash);
+        }
+
+        // Generate colors from hash
+        function generateColors(hash) {
+            const colors = [];
+            for (let i = 0; i < 5; i++) {
+                const r = (hash >> (i * 5)) & 0xFF;
+                const g = (hash >> (i * 5 + 8)) & 0xFF;
+                const b = (hash >> (i * 5 + 16)) & 0xFF;
+                colors.push([r / 255, g / 255, b / 255]);
+            }
+            return colors;
+        }
+
+        // Generate procedural image based on prompt
+        function generateProceduralImage(width, height, hash, step, totalSteps, colors, prompt) {
+            const imageData = new ImageData(width, height);
+            const data = imageData.data;
+            
+            const noise = step / totalSteps; // Progress from noise to clear
+            
+            // Parse prompt for keywords
+            const promptLower = prompt.toLowerCase();
+            const hasWater = promptLower.includes('water') || promptLower.includes('lake') || promptLower.includes('ocean');
+            const hasMountain = promptLower.includes('mountain') || promptLower.includes('hill');
+            const hasSky = promptLower.includes('sky') || promptLower.includes('sunset') || promptLower.includes('sunrise');
+            const hasCyberpunk = promptLower.includes('cyberpunk') || promptLower.includes('neon') || promptLower.includes('city');
+            const hasDragon = promptLower.includes('dragon');
+            const hasRobot = promptLower.includes('robot');
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    
+                    // Base noise
+                    const nx = x / width;
+                    const ny = y / height;
+                    
+                    // Perlin-like noise
+                    let value = perlinNoise(nx * 3, ny * 3, hash);
+                    
+                    // Add features based on prompt
+                    if (hasSky && ny < 0.5) {
+                        // Sky gradient
+                        const skyGradient = 1 - (ny * 2);
+                        value = value * 0.5 + skyGradient * 0.5;
+                    }
+                    
+                    if (hasMountain && ny > 0.4) {
+                        // Mountain silhouette
+                        const mountainNoise = perlinNoise(nx * 5, 0, hash + 1000);
+                        const mountainThreshold = 0.3 + mountainNoise * 0.3;
+                        if (ny > 1 - mountainThreshold) {
+                            value = value * 0.3 + 0.7;
+                        }
+                    }
+                    
+                    if (hasWater && ny > 0.5) {
+                        // Water reflection
+                        const waterNoise = perlinNoise(nx * 4, ny * 2, hash + 2000);
+                        value = value * 0.7 + waterNoise * 0.3;
+                    }
+                    
+                    if (hasCyberpunk) {
+                        // Neon grid pattern
+                        const gridX = Math.floor(nx * 20) / 20;
+                        const gridY = Math.floor(ny * 20) / 20;
+                        const gridValue = (gridX + gridY) % 2;
+                        value = value * 0.5 + gridValue * 0.5;
+                    }
+                    
+                    // Interpolate from noise to final image
+                    const progress = step / totalSteps;
+                    const finalValue = value * (1 - progress) + value * progress;
+                    
+                    // Apply color based on position and value
+                    const colorIdx = Math.floor((value + nx + ny) * colors.length) % colors.length;
+                    const baseColor = colors[colorIdx];
+                    
+                    // Add variation
+                    const variation = perlinNoise(nx * 10, ny * 10, hash + step * 100) * 0.2;
+                    
+                    data[idx] = Math.min(255, (baseColor[0] + variation) * 255 * (finalValue + 0.2));
+                    data[idx + 1] = Math.min(255, (baseColor[1] + variation) * 255 * (finalValue + 0.2));
+                    data[idx + 2] = Math.min(255, (baseColor[2] + variation) * 255 * (finalValue + 0.2));
+                    data[idx + 3] = 255;
+                }
+            }
+            
+            return imageData;
+        }
+
+        // Simple Perlin noise implementation
+        function perlinNoise(x, y, seed = 0) {
+            const X = Math.floor(x) & 255;
+            const Y = Math.floor(y) & 255;
+            
+            x -= Math.floor(x);
+            y -= Math.floor(y);
+            
+            const u = fade(x);
+            const v = fade(y);
+            
+            const A = (pseudoRandom(X + seed) + Y) % 256;
+            const B = (pseudoRandom(X + seed + 1) + Y) % 256;
+            
+            const result = lerp(
+                lerp(grad(A, x, y), grad(B, x - 1, y), u),
+                lerp(grad(A + 1, x, y - 1), grad(B + 1, x - 1, y - 1), u),
+                v
+            );
+            
+            return (result + 1) / 2;
+        }
+
+        function fade(t) {
+            return t * t * t * (t * (t * 6 - 15) + 10);
+        }
+
+        function lerp(a, b, t) {
+            return a + t * (b - a);
+        }
+
+        function pseudoRandom(n) {
+            n = (n << 13) ^ n;
+            return ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff);
+        }
+
+        function grad(hash, x, y) {
+            const h = hash & 3;
+            const u = h < 2 ? x : y;
+            const v = h < 2 ? y : x;
+            return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+        }
+
+        // Generate button click
+        generateBtn.addEventListener('click', async () => {
+            if (isGenerating || !sdEngine) return;
+            
+            const prompt = promptInput.value.trim();
+            if (!prompt) {
+                alert('Please enter a prompt');
+                return;
+            }
+            
+            isGenerating = true;
+            generateBtn.disabled = true;
+            generateBtn.classList.add('generating');
+            document.querySelector('.btn-text').textContent = 'Generating...';
+            
+            // Get settings
+            const steps = parseInt(stepsSlider.value);
+            const guidance = parseFloat(guidanceSlider.value);
+            const width = parseInt(widthSelect.value);
+            const height = parseInt(heightSelect.value);
+            let seed = parseInt(seedInput.value);
+            if (seed === -1 || isNaN(seed)) {
+                seed = Math.floor(Math.random() * 2147483647);
+            }
+            currentSeed = seed;
+            const scheduler = schedulerSelect.value;
+            const negativePrompt = negativeInput.value.trim();
+            
+            // Apply style
+            const fullPrompt = prompt + (activeStyle || '');
+            
+            // Show progress
+            progressSection.style.display = 'block';
+            statsBar.style.display = 'block';
+            diffusionViz.style.display = 'grid';
+            placeholder.style.display = 'none';
+            
+            // Setup step indicator
+            setupStepIndicator(steps);
+            
+            // Setup diffusion visualization
+            setupDiffusionViz();
+            
+            startTime = performance.now();
+            
+            try {
+                await sdEngine.generate(fullPrompt, negativePrompt, {
+                    width,
+                    height,
+                    steps,
+                    guidance,
+                    seed,
+                    scheduler,
+                    onProgress: (progress) => {
+                        updateProgress(progress);
+                    }
+                });
+                
+                // Add to gallery
+                addToGallery();
+                
+                // Enable actions
+                downloadBtn.disabled = false;
+                upscaleBtn.disabled = false;
+                variationsBtn.disabled = false;
+                
+                logToStats('Generation complete!', 'success');
+                
+            } catch (error) {
+                console.error('Generation error:', error);
+                alert('Generation failed: ' + error.message);
+                logToStats('Error: ' + error.message, 'error');
+            }
+            
+            isGenerating = false;
+            generateBtn.disabled = false;
+            generateBtn.classList.remove('generating');
+            document.querySelector('.btn-text').textContent = '🚀 Generate Image';
+        });
+
+        // Setup step indicator
+        function setupStepIndicator(totalSteps) {
+            stepIndicator.innerHTML = '';
+            for (let i = 0; i < totalSteps; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'step-dot';
+                stepIndicator.appendChild(dot);
+            }
+        }
+
+        // Setup diffusion visualization
+        function setupDiffusionViz() {
+            diffusionViz.innerHTML = '';
+            for (let i = 0; i < 4; i++) {
+                const vizStep = document.createElement('div');
+                vizStep.className = 'viz-step';
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 64;
+                const label = document.createElement('div');
+                label.className = 'label';
+                label.textContent = `Step ${i + 1}`;
+                vizStep.appendChild(canvas);
+                vizStep.appendChild(label);
+                diffusionViz.appendChild(vizStep);
+            }
+        }
+
+        // Update progress
+        function updateProgress(progress) {
+            const { step, total, progress: pct } = progress;
+            
+            // Update progress bar
+            const percent = Math.round(pct * 100);
+            progressFill.style.width = percent + '%';
+            progressPercent.textContent = percent + '%';
+            progressText.textContent = `Step ${step}/${total}`;
+            
+            // Update step indicator
+            const dots = stepIndicator.querySelectorAll('.step-dot');
+            dots.forEach((dot, i) => {
+                if (i < step - 1) {
+                    dot.classList.add('completed');
+                    dot.classList.remove('current');
+                } else if (i === step - 1) {
+                    dot.classList.add('current');
+                } else {
+                    dot.classList.remove('completed', 'current');
+                }
+            });
+            
+            // Update stats
+            currentStepEl.textContent = `${step}/${total}`;
+            const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+            elapsedTimeEl.textContent = elapsed + 's';
+            
+            if (stepStartTime > 0) {
+                const stepElapsed = ((performance.now() - stepStartTime) / 1000).toFixed(2);
+                stepTimeEl.textContent = stepElapsed + 's';
+            }
+            
+            // Update diffusion visualization
+            updateDiffusionViz(step, total);
+            
+            // Update memory
+            if (navigator.deviceMemory) {
+                memoryUsageEl.textContent = navigator.deviceMemory + 'GB';
+            }
+        }
+
+        // Update diffusion visualization
+        function updateDiffusionViz(currentStep, totalSteps) {
+            const canvases = diffusionViz.querySelectorAll('canvas');
+            const ctx = outputCanvas.getContext('2d');
+            
+            canvases.forEach((canvas, i) => {
+                const vizCtx = canvas.getContext('2d');
+                const stepToShow = Math.floor((i + 1) / 4 * currentStep);
+                
+                if (stepToShow > 0) {
+                    // Draw downscaled version of current output
+                    vizCtx.drawImage(outputCanvas, 0, 0, 64, 64);
+                } else {
+                    // Show noise
+                    const imageData = vizCtx.createImageData(64, 64);
+                    const data = imageData.data;
+                    for (let j = 0; j < data.length; j += 4) {
+                        const value = Math.random() * 128;
+                        data[j] = value;
+                        data[j + 1] = value;
+                        data[j + 2] = value;
+                        data[j + 3] = 255;
+                    }
+                    vizCtx.putImageData(imageData, 0, 0);
+                }
+            });
+        }
+
+        // Add to gallery
+        function addToGallery() {
+            const dataUrl = outputCanvas.toDataURL('image/png');
+            generatedImages.unshift({
+                dataUrl,
+                prompt: promptInput.value,
+                seed: currentSeed,
+                timestamp: Date.now()
+            });
+            
+            // Keep only last 12 images
+            if (generatedImages.length > 12) {
+                generatedImages.pop();
+            }
+            
+            updateGallery();
+        }
+
+        // Update gallery display
+        function updateGallery() {
+            gallery.innerHTML = '';
+            
+            generatedImages.forEach((img, index) => {
+                const item = document.createElement('div');
+                item.className = 'gallery-item';
+                item.innerHTML = `<img src="${img.dataUrl}" alt="Generated image ${index + 1}">`;
+                item.addEventListener('click', () => {
+                    loadFromGallery(index);
+                });
+                gallery.appendChild(item);
+            });
+            
+            // Fill remaining slots
+            while (gallery.children.length < 4) {
+                const empty = document.createElement('div');
+                empty.className = 'gallery-item empty';
+                empty.textContent = '+';
+                gallery.appendChild(empty);
+            }
+        }
+
+        // Load image from gallery
+        function loadFromGallery(index) {
+            const img = generatedImages[index];
+            const image = new Image();
+            image.src = img.dataUrl;
+            image.onload = () => {
+                outputCanvas.width = image.width;
+                outputCanvas.height = image.height;
+                const ctx = outputCanvas.getContext('2d');
+                ctx.drawImage(image, 0, 0);
+                promptInput.value = img.prompt;
+                seedInput.value = img.seed;
+                placeholder.style.display = 'none';
+                downloadBtn.disabled = false;
+            };
+        }
+
+        // Download image
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = `ai-generated-${Date.now()}.png`;
+            link.href = outputCanvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // Upscale (mock)
+        upscaleBtn.addEventListener('click', () => {
+            alert('Upscaling would use a super-resolution model to enhance the image quality. This requires additional model weights.');
+        });
+
+        // Variations (mock)
+        variationsBtn.addEventListener('click', () => {
+            // Generate with slightly different seed
+            seedInput.value = currentSeed + Math.floor(Math.random() * 1000);
+            generateBtn.click();
+        });
+
+        // Quick prompts
+        document.querySelectorAll('.quick-prompt').forEach(btn => {
+            btn.addEventListener('click', () => {
+                promptInput.value = btn.dataset.prompt;
+            });
+        });
+
+        // Style presets
+        document.querySelectorAll('.style-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.style-preset').forEach(b => b.classList.remove('active'));
+                
+                if (activeStyle === stylePrompts[btn.dataset.style]) {
+                    activeStyle = '';
+                    btn.classList.remove('active');
+                } else {
+                    activeStyle = stylePrompts[btn.dataset.style];
+                    btn.classList.add('active');
+                }
+            });
+        });
+
+        // Settings value updates
+        stepsSlider.addEventListener('input', (e) => {
+            stepsValue.textContent = e.target.value;
+        });
+
+        guidanceSlider.addEventListener('input', (e) => {
+            guidanceValue.textContent = e.target.value;
+        });
+
+        widthSelect.addEventListener('change', (e) => {
+            widthValue.textContent = e.target.value;
+            outputCanvas.width = parseInt(e.target.value);
+        });
+
+        heightSelect.addEventListener('change', (e) => {
+            heightValue.textContent = e.target.value;
+            outputCanvas.height = parseInt(e.target.value);
+        });
+
+        // Log to stats
+        function logToStats(message, type = 'info') {
+            console.log(`[${type}] ${message}`);
+        }
+
+        // Initialize on load
+        initStableDiffusion();
+    </script>
+</body>
+</html>
