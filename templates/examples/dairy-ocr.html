@@ -278,17 +278,26 @@
 
         <!-- Mode Selector -->
         <div class="mode-selector" style="background: rgba(88, 166, 255, 0.1); border: 2px solid rgba(88, 166, 255, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; text-align: center;">
+            <h3 style="color: #58a6ff; margin-bottom: 0.75rem;">🔧 Choose AI Backend</h3>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; align-items: center;">
                 <button id="demoModeBtn" style="padding: 0.75rem 1.5rem; background: #238636; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer;">
-                    ⚡ Demo Mode (Fast)
+                    ⚡ Demo Mode (Simulated)
                 </button>
-                <button id="realModeBtn" style="padding: 0.75rem 1.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-weight: bold; cursor: pointer;">
-                    🤖 Real AI Mode (Downloads 2GB)
+                <button id="cloudModeBtn" style="padding: 0.75rem 1.5rem; background: rgba(88, 166, 255, 0.3); border: 1px solid rgba(88, 166, 255, 0.5); border-radius: 8px; color: white; font-weight: bold; cursor: pointer;">
+                    ☁️ Cloud AI (Works on iOS!)
+                </button>
+                <button id="localModeBtn" style="padding: 0.75rem 1.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-weight: bold; cursor: pointer;">
+                    🤖 Local WebGPU (2GB Download)
                 </button>
             </div>
             <p id="modeDescription" style="color: #888; font-size: 0.85rem; margin-top: 0.75rem;">
-                <strong>Demo Mode:</strong> Simulated scans, no download required. Great for testing!
+                <strong>Cloud AI:</strong> Real AI via Hugging Face API. Works on all devices including iOS! Requires free API key.
             </p>
+            <div id="apiKeySection" style="margin-top: 1rem; display: none;">
+                <input type="password" id="hfApiKey" placeholder="Enter Hugging Face API key (free)" style="padding: 0.5rem 1rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: white; font-size: 0.9rem; width: 300px;">
+                <button id="saveApiKeyBtn" style="padding: 0.5rem 1rem; background: #58a6ff; border: none; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; margin-left: 0.5rem;">Save Key</button>
+                <p style="color: #888; font-size: 0.75rem; margin-top: 0.5rem;">Get your free API key at: <a href="https://huggingface.co/settings/tokens" target="_blank" style="color: #58a6ff;">huggingface.co/settings/tokens</a></p>
+            </div>
         </div>
 
         <div class="main-layout">
@@ -409,7 +418,8 @@
         let scanHistory = [];
         let totalScans = 0;
         let healthScores = [];
-        let useRealAI = false; // false = demo mode, true = real AI mode
+        let aiMode = 'demo'; // 'demo', 'cloud', or 'local'
+        let hfApiKey = localStorage.getItem('hfApiKey') || '';
 
         // DOM Elements
         const video = document.getElementById('camera');
@@ -425,93 +435,166 @@
         const loadingOverlay = document.getElementById('loadingOverlay');
         const loadingText = document.getElementById('loadingText');
         const loadingProgress = document.getElementById('loadingProgress');
+        
+        // Mode selector elements
+        const demoModeBtn = document.getElementById('demoModeBtn');
+        const cloudModeBtn = document.getElementById('cloudModeBtn');
+        const localModeBtn = document.getElementById('localModeBtn');
+        const modeDescription = document.getElementById('modeDescription');
+        const apiKeySection = document.getElementById('apiKeySection');
+        const hfApiKeyInput = document.getElementById('hfApiKey');
+        const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
 
         // Initialize
         async function init() {
-            // Start in demo mode by default
-            if (!useRealAI) {
-                statusText.textContent = 'Demo mode - Ready to scan';
-                statusBadge.textContent = 'Demo';
-                statusBadge.className = 'status-badge loading';
-                scanBtn.disabled = false;
-                
-                // Start camera for demo
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: { facingMode: 'environment' }
-                    });
-                    video.srcObject = stream;
-                    hideLoading();
-                } catch (err) {
-                    statusText.textContent = 'Camera unavailable';
-                    console.error('Camera error:', err);
-                }
+            // Start camera
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error('Camera error:', err);
+            }
+            
+            hideLoading();
+            setMode('demo');
+        }
+
+        // Set AI mode
+        function setMode(mode) {
+            aiMode = mode;
+            
+            // Reset button styles
+            demoModeBtn.style.background = 'rgba(255,255,255,0.1)';
+            demoModeBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+            cloudModeBtn.style.background = 'rgba(255,255,255,0.1)';
+            cloudModeBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+            localModeBtn.style.background = 'rgba(255,255,255,0.1)';
+            localModeBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+            
+            switch(mode) {
+                case 'demo':
+                    demoModeBtn.style.background = '#238636';
+                    demoModeBtn.style.border = 'none';
+                    statusText.textContent = 'Demo mode - Ready to scan';
+                    statusBadge.textContent = 'Demo';
+                    statusBadge.className = 'status-badge loading';
+                    modeDescription.innerHTML = '<strong>Demo Mode:</strong> Simulated scans, no download or API key required.';
+                    apiKeySection.style.display = 'none';
+                    scanBtn.disabled = false;
+                    break;
+                    
+                case 'cloud':
+                    cloudModeBtn.style.background = '#58a6ff';
+                    cloudModeBtn.style.border = 'none';
+                    modeDescription.innerHTML = '<strong>Cloud AI:</strong> Real AI via Hugging Face API. Works on all devices!';
+                    apiKeySection.style.display = hfApiKey ? 'none' : 'block';
+                    
+                    if (hfApiKey) {
+                        statusText.textContent = 'Cloud AI - Ready (API key set)';
+                        statusBadge.textContent = 'Cloud AI';
+                        statusBadge.className = 'status-badge ready';
+                        scanBtn.disabled = false;
+                    } else {
+                        statusText.textContent = 'Cloud AI - Enter API key';
+                        statusBadge.textContent = 'Need Key';
+                        statusBadge.className = 'status-badge loading';
+                        scanBtn.disabled = true;
+                    }
+                    break;
+                    
+                case 'local':
+                    localModeBtn.style.background = '#00d9ff';
+                    localModeBtn.style.border = 'none';
+                    modeDescription.innerHTML = '<strong>Local WebGPU:</strong> Downloads 2GB model. Chrome/Edge on desktop only.';
+                    apiKeySection.style.display = 'none';
+                    initLocalAI();
+                    break;
+            }
+        }
+
+        // Initialize local WebGPU AI
+        async function initLocalAI() {
+            const confirmed = confirm('Local AI Mode will download ~2GB of model weights. This takes 1-5 minutes. Continue?');
+            if (!confirmed) {
+                setMode('demo');
                 return;
             }
             
-            // Real AI mode
             try {
-                // Load Transformers.js
-                await loadTransformersLibrary();
-
-                // Initialize Moondream2 pipeline
                 statusText.textContent = 'Loading AI model...';
                 statusBadge.textContent = 'Loading';
                 statusBadge.className = 'status-badge loading';
-
+                
+                await loadTransformersLibrary();
+                
                 vqaPipeline = await window.transformers.pipeline(
                     'image-text-to-text',
                     'onnx-community/moondream2',
-                    {
-                        device: 'webgpu',
-                        dtype: 'fp16'
-                    }
+                    { device: 'webgpu', dtype: 'fp16' }
                 );
-
-                // Start camera
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                });
-                video.srcObject = stream;
-
-                // Ready
+                
                 statusText.textContent = 'System ready - Focus on ear tag';
                 statusBadge.textContent = 'Ready';
                 statusBadge.className = 'status-badge ready';
                 scanBtn.disabled = false;
-
-                hideLoading();
-                logToHistory('System initialized', 'info');
-
-            } catch (err) {
-                console.error('Init error:', err);
-                statusText.textContent = 'Error: ' + err.message;
-                statusBadge.textContent = 'Error';
-                statusBadge.className = 'status-badge error';
                 
-                // Fallback to demo mode
-                setTimeout(() => {
-                    useRealAI = false;
-                    demoModeBtn.click();
-                    hideLoading();
-                    alert('WebGPU not available. Switched to Demo Mode.');
-                }, 2000);
+            } catch (err) {
+                console.error('Local AI error:', err);
+                alert('WebGPU not available: ' + err.message + '\n\nSwitching to Demo Mode.');
+                setMode('demo');
             }
+        }
+
+        // Cloud AI inference using Hugging Face API
+        async function queryHuggingFaceAPI(imageBlob) {
+            if (!hfApiKey) {
+                throw new Error('No API key set. Please enter your Hugging Face API key.');
+            }
+            
+            // Convert blob to base64
+            const base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(imageBlob);
+            });
+            
+            // Use Moondream2 via Hugging Face Inference API
+            const response = await fetch('https://api-inference.huggingface.co/models/onnx-community/moondream2', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${hfApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    inputs: {
+                        image: base64,
+                        prompt: "Extract the ear tag number and describe the cow's posture and cleanliness. Format: ID: [number] | Status: [description] | Health: [1-10]"
+                    },
+                    parameters: {
+                        max_new_tokens: 150
+                    }
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'API request failed');
+            }
+            
+            const result = await response.json();
+            return result[0]?.generated_text || 'No result from API';
         }
 
         // Load Transformers.js library
         async function loadTransformersLibrary() {
             return new Promise((resolve, reject) => {
-                // Check if already loaded
                 if (window.transformers) {
                     resolve();
                     return;
                 }
-
                 const script = document.createElement('script');
                 script.src = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.0/dist/transformers.min.js';
                 script.onload = resolve;
@@ -529,39 +612,34 @@
 
         // Scan animal
         async function scanDier() {
-            if (!scanBtn.disabled && vqaPipeline) {
-                // Real scan
-                await performRealScan();
-            } else {
-                // Demo mode
-                await performDemoScan();
-            }
-        }
-
-        // Perform real AI scan
-        async function performRealScan() {
+            if (scanBtn.disabled) return;
+            
             scanBtn.disabled = true;
             scanBtn.classList.add('scanning');
-            resultText.textContent = 'Analyzing image...';
+            resultText.textContent = 'Analyzing...';
             
             try {
                 // Capture frame
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                // Convert to blob
                 const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
                 
-                // Combined prompt for OCR and health assessment
-                const prompt = "Extract the ear tag number (oormerk) and describe the cow's posture and cleanliness. Format: ID: [number] | Status: [description] | Health: [1-10]";
+                let result;
                 
-                // Run inference
-                const output = await vqaPipeline(blob, prompt, { 
-                    max_new_tokens: 150,
-                    temperature: 0.1
-                });
+                if (aiMode === 'cloud') {
+                    // Use Hugging Face API
+                    result = await queryHuggingFaceAPI(blob);
+                } else if (aiMode === 'local' && vqaPipeline) {
+                    // Use local WebGPU
+                    const prompt = "Extract the ear tag number (oormerk) and describe the cow's posture and cleanliness. Format: ID: [number] | Status: [description] | Health: [1-10]";
+                    const output = await vqaPipeline(blob, prompt, { max_new_tokens: 150, temperature: 0.1 });
+                    result = output[0]?.generated_text || 'No result';
+                } else {
+                    // Demo mode
+                    await performDemoScan();
+                    return;
+                }
                 
-                const result = output[0]?.generated_text || 'No result';
                 displayResult(result);
                 addToHistory(result);
                 
@@ -701,41 +779,26 @@
         // Event listeners
         scanBtn.addEventListener('click', scanDier);
 
-        // Mode selector
-        const demoModeBtn = document.getElementById('demoModeBtn');
-        const realModeBtn = document.getElementById('realModeBtn');
-        const modeDescription = document.getElementById('modeDescription');
+        // Mode selector buttons
+        demoModeBtn.addEventListener('click', () => setMode('demo'));
+        cloudModeBtn.addEventListener('click', () => setMode('cloud'));
+        localModeBtn.addEventListener('click', () => setMode('local'));
 
-        demoModeBtn.addEventListener('click', () => {
-            useRealAI = false;
-            demoModeBtn.style.background = '#238636';
-            demoModeBtn.style.border = 'none';
-            realModeBtn.style.background = 'rgba(255,255,255,0.1)';
-            realModeBtn.style.border = '1px solid rgba(255,255,255,0.2)';
-            modeDescription.innerHTML = '<strong>Demo Mode:</strong> Simulated scans, no download required. Great for testing!';
-            statusText.textContent = 'Demo mode active';
-            statusBadge.textContent = 'Demo';
-            statusBadge.className = 'status-badge loading';
-            scanBtn.disabled = false;
+        // API key save
+        saveApiKeyBtn.addEventListener('click', () => {
+            const key = hfApiKeyInput.value.trim();
+            if (key) {
+                hfApiKey = key;
+                localStorage.setItem('hfApiKey', key);
+                alert('API key saved! You can now use Cloud AI mode.');
+                setMode('cloud');
+            }
         });
 
-        realModeBtn.addEventListener('click', async () => {
-            if (useRealAI) return; // Already in real mode
-            
-            const confirmed = confirm('Real AI Mode will download ~2GB of model weights. This takes 1-5 minutes depending on your connection. Continue?');
-            if (!confirmed) return;
-            
-            useRealAI = true;
-            realModeBtn.style.background = '#58a6ff';
-            realModeBtn.style.border = 'none';
-            demoModeBtn.style.background = 'rgba(255,255,255,0.1)';
-            demoModeBtn.style.border = '1px solid rgba(255,255,255,0.2)';
-            modeDescription.innerHTML = '<strong>Real AI Mode:</strong> Loading Moondream2 model...';
-            
-            // Hide overlay and init real AI
-            loadingOverlay.classList.remove('hidden');
-            await init();
-        });
+        // Load saved API key
+        if (hfApiKey) {
+            hfApiKeyInput.value = hfApiKey;
+        }
 
         // Initialize on load
         init();
