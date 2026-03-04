@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen Chat - WebGPU LLM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .chat-container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 200px);
+        }
+
+        .chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: rgba(0, 217, 255, 0.1);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .model-selector {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .model-selector select {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #00d9ff;
+            color: #fff;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ffaa00;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.ready {
+            background: #00ff88;
+        }
+
+        .status-dot.loading {
+            background: #00d9ff;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .message {
+            margin-bottom: 1.5rem;
+            display: flex;
+            gap: 1rem;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .user-message .message-avatar {
+            background: linear-gradient(135deg, #00d9ff, #00ff88);
+        }
+
+        .assistant-message .message-avatar {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .message-content {
+            flex: 1;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            line-height: 1.6;
+        }
+
+        .message-content p {
+            margin-bottom: 0.5rem;
+        }
+
+        .message-content pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            margin: 0.5rem 0;
+        }
+
+        .message-content code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 0.5rem;
+            padding: 1rem;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00d9ff;
+            animation: typingBounce 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            resize: none;
+            font-family: inherit;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        .send-btn {
+            padding: 1rem 2rem;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(0, 217, 255, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .progress-text {
+            font-size: 0.85rem;
+            color: #aaa;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 2rem;
+            padding: 0.5rem 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.75rem;
+        }
+
+        .stat-value {
+            color: #00ff88;
+            font-size: 1rem;
+        }
+
+        .welcome-message {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+
+        .welcome-message h3 {
+            color: #00d9ff;
+            margin-bottom: 1rem;
+        }
+
+        .quick-prompts {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .quick-prompt {
+            padding: 0.5rem 1rem;
+            background: rgba(0, 217, 255, 0.1);
+            border: 1px solid rgba(0, 217, 255, 0.3);
+            border-radius: 20px;
+            color: #00d9ff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-prompt:hover {
+            background: rgba(0, 217, 255, 0.2);
+        }
+
+        .clear-btn {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 68, 68, 0.2);
+            border: 1px solid #ff4444;
+            color: #ff4444;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .clear-btn:hover {
+            background: rgba(255, 68, 68, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Overview</a>
+        
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>🤖 Qwen Chat</h1>
+                <div class="model-selector">
+                    <select id="modelSelect">
+                        <option value="Qwen2.5-1.5B-Instruct-q4f32_1-MLC">Qwen2.5-1.5B (Fast)</option>
+                        <option value="Qwen2.5-3B-Instruct-q4f32_1-MLC">Qwen2.5-3B (Balanced)</option>
+                        <option value="Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC">Qwen2.5-Coder-1.5B</option>
+                    </select>
+                    <div class="status-indicator">
+                        <div class="status-dot" id="statusDot"></div>
+                        <span id="statusText">Initializing...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="loadProgress"></div>
+                </div>
+                <div class="progress-text">
+                    <span id="progressStage">Loading model...</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+            </div>
+
+            <div class="stats-bar" id="statsBar" style="display: none;">
+                <div class="stat-item">
+                    <span class="stat-label">Tokens Generated</span>
+                    <span class="stat-value" id="tokensGenerated">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tokens/sec</span>
+                    <span class="stat-value" id="tokensPerSec">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">KV Cache</span>
+                    <span class="stat-value" id="kvCache">0/0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Memory</span>
+                    <span class="stat-value" id="memoryUsage">-</span>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message">
+                    <h3>Welcome to Qwen Chat!</h3>
+                    <p>The model will run entirely in your browser using WebGPU.</p>
+                    <p>No data leaves your device - complete privacy.</p>
+                    <div class="quick-prompts">
+                        <div class="quick-prompt" data-prompt="Hello! Can you introduce yourself?">👋 Introduction</div>
+                        <div class="quick-prompt" data-prompt="Explain how WebGPU works in simple terms">💻 WebGPU Explained</div>
+                        <div class="quick-prompt" data-prompt="Write a Python function to calculate fibonacci">🐍 Code Example</div>
+                        <div class="quick-prompt" data-prompt="What are the main applications of machine learning?">🤖 ML Applications</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-container">
+                <textarea 
+                    class="chat-input" 
+                    id="chatInput" 
+                    placeholder="Type your message... (Shift+Enter for new line)"
+                    rows="1"
+                    disabled
+                ></textarea>
+                <button class="send-btn" id="sendBtn" disabled>Send</button>
+            </div>
+
+            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                <button class="clear-btn" id="clearBtn">🗑️ Clear Chat</button>
+                <button class="clear-btn" id="unloadBtn">⏏️ Unload Model</button>
+                <button class="clear-btn" id="clearCacheBtn">🧹 Clear Cache</button>
+            </div>
+        </div>
+
+        <section>
+            <h2>How It Works</h2>
+            <p>This chat runs Qwen LLM entirely in your browser using <strong>WebLLM</strong> and <strong>WebGPU</strong>:</p>
+            <ul style="margin-left: 1.5rem; line-height: 2;">
+                <li><strong>Model Download:</strong> Quantized model weights are downloaded once and cached</li>
+                <li><strong>WebGPU Compute:</strong> Matrix operations run on your GPU for fast inference</li>
+                <li><strong>Privacy:</strong> All computation happens locally - no data sent to servers</li>
+                <li><strong>Streaming:</strong> Responses appear token by token as they're generated</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>System Requirements</h2>
+            <ul style="margin-left: 1.5rem; line-height: 2;">
+                <li><strong>Browser:</strong> Chrome 113+ or Edge 113+ with WebGPU support</li>
+                <li><strong>GPU:</strong> Dedicated GPU recommended (4GB+ VRAM for larger models)</li>
+                <li><strong>RAM:</strong> 8GB+ system RAM recommended</li>
+                <li><strong>Storage:</strong> 1-4GB for model cache (downloaded once)</li>
+            </ul>
+        </section>
+    </div>
+
+    <script type="module">
+        // Import WebLLM from unpkg CDN (more reliable for caching)
+        import * as webllm from 'https://unpkg.com/@mlc-ai/web-llm@0.2.78/dist/index.min.js';
+
+        const modelSelect = document.getElementById('modelSelect');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const loadProgress = document.getElementById('loadProgress');
+        const progressStage = document.getElementById('progressStage');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressContainer = document.getElementById('progressContainer');
+        const statsBar = document.getElementById('statsBar');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const unloadBtn = document.getElementById('unloadBtn');
+
+        // Stats elements
+        const tokensGeneratedEl = document.getElementById('tokensGenerated');
+        const tokensPerSecEl = document.getElementById('tokensPerSec');
+        const kvCacheEl = document.getElementById('kvCache');
+        const memoryUsageEl = document.getElementById('memoryUsage');
+
+        let engine = null;
+        let isGenerating = false;
+        let totalTokens = 0;
+        let generationStartTime = 0;
+
+        // Progress callback for model loading
+        const initProgressCallback = (progress) => {
+            const percent = Math.round(progress.progress * 100);
+            loadProgress.style.width = `${percent}%`;
+            progressPercent.textContent = `${percent}%`;
+            progressStage.textContent = progress.text || 'Loading...';
+            console.log('Loading progress:', progress);
+            
+            if (progress.progress === 1) {
+                statusDot.className = 'status-dot ready';
+                statusText.textContent = 'Ready';
+                progressContainer.style.display = 'none';
+                chatInput.disabled = false;
+                sendBtn.disabled = false;
+                statsBar.style.display = 'flex';
+            }
+        };
+
+        // Initialize model
+        async function initModel() {
+            const modelId = modelSelect.value;
+            
+            statusDot.className = 'status-dot loading';
+            statusText.textContent = 'Loading model...';
+            progressContainer.style.display = 'block';
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+            statsBar.style.display = 'none';
+            loadProgress.style.width = '0%';
+            progressPercent.textContent = '0%';
+
+            try {
+                // Clear previous engine if exists
+                if (engine) {
+                    await engine.unload();
+                    engine = null;
+                }
+
+                // Initialize model with progress callback
+                const engineConfig = {
+                    initProgressCallback: initProgressCallback
+                };
+
+                engine = await webllm.CreateMLCEngine(modelId, engineConfig);
+
+                totalTokens = 0;
+                updateStats();
+            } catch (error) {
+                console.error('Failed to load model:', error);
+                statusDot.className = 'status-dot';
+                statusText.textContent = 'Error: ' + error.message;
+                progressStage.textContent = 'Failed to load model. Try refreshing or selecting a different model.';
+            }
+        }
+
+        // Add message to chat
+        function addMessage(role, content) {
+            // Remove welcome message if present
+            const welcome = chatMessages.querySelector('.welcome-message');
+            if (welcome) {
+                welcome.remove();
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = role === 'user' ? '👤' : '🤖';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = formatMessage(content);
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            return contentDiv;
+        }
+
+        // Format message with basic markdown
+        function formatMessage(text) {
+            // Escape HTML
+            text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            // Code blocks
+            text = text.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
+            
+            // Inline code
+            text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+            
+            // Bold
+            text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            
+            // Line breaks
+            text = text.replace(/\n/g, '<br>');
+            
+            return text;
+        }
+
+        // Show typing indicator
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message assistant-message';
+            typingDiv.id = 'typingIndicator';
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = '🤖';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = `
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            
+            typingDiv.appendChild(avatar);
+            typingDiv.appendChild(contentDiv);
+            chatMessages.appendChild(typingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Remove typing indicator
+        function removeTypingIndicator() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        // Update stats
+        function updateStats() {
+            tokensGeneratedEl.textContent = totalTokens;
+            
+            if (generationStartTime > 0) {
+                const elapsed = (performance.now() - generationStartTime) / 1000;
+                const tps = elapsed > 0 ? (totalTokens / elapsed).toFixed(2) : '0';
+                tokensPerSecEl.textContent = tps;
+            }
+            
+            if (engine) {
+                const runtimeStats = engine.getRuntimeStats();
+                if (runtimeStats) {
+                    kvCacheEl.textContent = `${runtimeStats.kvCacheBytes || 0}/${runtimeStats.kvCacheMaxBytes || 0}`;
+                    if (runtimeStats.gpuMemoryUsage) {
+                        memoryUsageEl.textContent = `${(runtimeStats.gpuMemoryUsage / 1024 / 1024).toFixed(0)}MB`;
+                    }
+                }
+            }
+        }
+
+        // Send message
+        async function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message || isGenerating || !engine) return;
+
+            isGenerating = true;
+            chatInput.value = '';
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+
+            // Add user message
+            addMessage('user', message);
+
+            // Show typing indicator
+            showTypingIndicator();
+
+            // Prepare messages for chat
+            const messages = [
+                { role: 'system', content: 'You are a helpful AI assistant. You are running locally in the user\'s browser using WebGPU and WebLLM. Be concise and helpful in your responses.' },
+                { role: 'user', content: message }
+            ];
+
+            generationStartTime = performance.now();
+            totalTokens = 0;
+
+            try {
+                removeTypingIndicator();
+                const responseDiv = addMessage('assistant', '');
+                let responseText = '';
+
+                const chunks = await engine.chat.completions.create({
+                    messages,
+                    temperature: 0.7,
+                    max_tokens: 1024,
+                    stream: true
+                });
+
+                for await (const chunk of chunks) {
+                    const delta = chunk.choices[0]?.delta?.content || '';
+                    responseText += delta;
+                    responseDiv.innerHTML = formatMessage(responseText);
+                    totalTokens++;
+                    updateStats();
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+
+                responseDiv.innerHTML = formatMessage(responseText);
+            } catch (error) {
+                console.error('Generation error:', error);
+                removeTypingIndicator();
+                addMessage('assistant', `Error: ${error.message}`);
+            }
+
+            isGenerating = false;
+            chatInput.disabled = false;
+            sendBtn.disabled = false;
+            chatInput.focus();
+            updateStats();
+        }
+
+        // Clear chat
+        function clearChat() {
+            chatMessages.innerHTML = `
+                <div class="welcome-message">
+                    <h3>Chat Cleared</h3>
+                    <p>Start a new conversation!</p>
+                </div>
+            `;
+            totalTokens = 0;
+            updateStats();
+        }
+
+        // Unload model
+        async function unloadModel() {
+            if (engine) {
+                await engine.unload();
+                engine = null;
+            }
+            statusDot.className = 'status-dot';
+            statusText.textContent = 'Unloaded';
+            progressContainer.style.display = 'block';
+            progressStage.textContent = 'Model unloaded. Select a model to load again.';
+            loadProgress.style.width = '0%';
+            progressPercent.textContent = '0%';
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+            statsBar.style.display = 'none';
+            clearChat();
+        }
+
+        // Event listeners
+        sendBtn.addEventListener('click', sendMessage);
+        
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        chatInput.addEventListener('input', () => {
+            chatInput.style.height = 'auto';
+            chatInput.style.height = Math.min(chatInput.scrollHeight, 150) + 'px';
+        });
+
+        clearBtn.addEventListener('click', clearChat);
+        unloadBtn.addEventListener('click', unloadModel);
+        
+        // Clear browser cache for WebLLM
+        document.getElementById('clearCacheBtn').addEventListener('click', async () => {
+            if (confirm('This will clear the browser cache. The model will need to be re-downloaded. Continue?')) {
+                try {
+                    await caches.keys().then(keys => {
+                        keys.forEach(key => caches.delete(key));
+                    });
+                    alert('Cache cleared! Please refresh the page.');
+                    location.reload();
+                } catch (e) {
+                    alert('Could not clear cache automatically. Please clear browser data manually (Settings > Privacy > Clear browsing data).');
+                }
+            }
+        });
+
+        modelSelect.addEventListener('change', initModel);
+
+        // Quick prompts
+        document.querySelectorAll('.quick-prompt').forEach(prompt => {
+            prompt.addEventListener('click', () => {
+                if (!chatInput.disabled) {
+                    chatInput.value = prompt.dataset.prompt;
+                    sendMessage();
+                }
+            });
+        });
+
+        // Auto-adjust textarea height
+        chatInput.style.height = 'auto';
+        chatInput.style.height = chatInput.scrollHeight + 'px';
+
+        // Initialize on load
+        initModel();
+
+        // Update stats periodically
+        setInterval(updateStats, 1000);
+    </script>
+</body>
+</html>

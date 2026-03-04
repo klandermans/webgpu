@@ -1,6 +1,6 @@
 # WebGPU Use Cases Demo
 
-A Flask application showcasing various WebGPU capabilities with interactive examples.
+A static HTML application showcasing various WebGPU capabilities with interactive examples.
 
 ## Features
 
@@ -16,31 +16,36 @@ This demo includes 7 interactive WebGPU examples:
 
 ## Requirements
 
-- Python 3.8+
 - Modern browser with WebGPU support (Chrome 113+, Edge 113+)
-
-## Installation
-
-```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
 
 ## Running the Application
 
-```bash
-# Activate virtual environment if not already active
-source venv/bin/activate
+### Option 1: Open directly in browser
+Simply open `index.html` in your browser.
 
-# Run the Flask app
-python app.py
+### Option 2: Use a local web server (recommended)
+
+```bash
+# Using Python
+python3 -m http.server 8080
+
+# Using Node.js
+npx serve .
+
+# Using PHP
+php -S localhost:8080
 ```
 
-Then open your browser to: http://localhost:5000
+Then open your browser to: http://localhost:8080
+
+## Deploying to Static Hosting
+
+This is a static HTML app that can be deployed to any static hosting service:
+
+- **GitHub Pages**: Push to a repository and enable GitHub Pages
+- **Netlify**: Drag and drop the folder or connect your repository
+- **Vercel**: Import your repository
+- **Cloudflare Pages**: Connect your Git repository
 
 ## Browser Compatibility
 
@@ -54,10 +59,9 @@ WebGPU requires a compatible browser:
 
 ```
 webgpu/
-├── app.py                  # Flask application
-├── requirements.txt        # Python dependencies
+├── index.html             # Main landing page
+├── README.md              # This file
 ├── templates/
-│   ├── index.html         # Main landing page
 │   └── examples/
 │       ├── triangle.html      # Basic triangle rendering
 │       ├── compute.html       # Compute shader demo
@@ -84,4 +88,3 @@ WebGPU is a modern web API that provides low-level access to GPU capabilities fo
 ## License
 
 MIT License
-# webgpu

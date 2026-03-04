@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Multiplication - WebGPU Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Overview</a>
+        
+        <div class="demo-container">
+            <h1>🔢 Matrix Multiplication</h1>
+            
+            <div class="demo-info">
+                <p>GPU-accelerated linear algebra operations:</p>
+                <ul style="text-align: left; display: inline-block; margin-top: 0.5rem;">
+                    <li><strong>Parallel Computation:</strong> Each output element computed independently</li>
+                    <li><strong>Shared Memory:</strong> Optimize memory access patterns</li>
+                    <li><strong>Workgroups:</strong> Efficient thread organization</li>
+                    <li><strong>ML Applications:</strong> Neural network inference, transformations</li>
+                </ul>
+            </div>
+
+            <div class="matrix-display">
+                <div class="matrix-container">
+                    <h3>Matrix A (<span id="sizeA">4x4</span>)</h3>
+                    <pre id="matrixA"></pre>
+                </div>
+                <div class="matrix-op">×</div>
+                <div class="matrix-container">
+                    <h3>Matrix B (<span id="sizeB">4x4</span>)</h3>
+                    <pre id="matrixB"></pre>
+                </div>
+                <div class="matrix-op">=</div>
+                <div class="matrix-container">
+                    <h3>Result (GPU)</h3>
+                    <pre id="matrixResult"></pre>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="computeBtn">Compute on GPU</button>
+                <button id="randomBtn">Random Matrices</button>
+                <label>
+                    Size: 
+                    <select id="matrixSize">
+                        <option value="4">4x4</option>
+                        <option value="8">8x8</option>
+                        <option value="16">16x16</option>
+                        <option value="32">32x32</option>
+                        <option value="64">64x64</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="stats">
+                <span>GPU Time: <span id="gpuTime">-</span>ms</span>
+                <span>CPU Time: <span id="cpuTime">-</span>ms</span>
+                <span>Speedup: <span id="speedup">-</span>x</span>
+            </div>
+        </div>
+
+        <section>
+            <h2>Why GPU for Matrix Operations?</h2>
+            <p>Matrix multiplication is fundamental to many applications:</p>
+            <ul style="margin-left: 1.5rem; line-height: 2;">
+                <li><strong>Machine Learning:</strong> Neural networks perform billions of matrix ops</li>
+                <li><strong>3D Graphics:</strong> Transformations use 4x4 matrices</li>
+                <li><strong>Physics Simulations:</strong> Solve systems of equations</li>
+                <li><strong>Data Science:</strong> PCA, SVD, and other algorithms</li>
+            </ul>
+            <p>The GPU computes each output element in parallel, achieving massive speedups for large matrices.</p>
+        </section>
+    </div>
+
+    <style>
+        .matrix-display {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+        .matrix-container {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .matrix-container h3 {
+            margin-bottom: 0.5rem;
+            color: #00d9ff;
+        }
+        .matrix-container pre {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #00ff88;
+        }
+        .matrix-op {
+            font-size: 2rem;
+            color: #00d9ff;
+        }
+    </style>
+
+    <script type="module">
+        const matrixAEl = document.getElementById('matrixA');
+        const matrixBEl = document.getElementById('matrixB');
+        const matrixResultEl = document.getElementById('matrixResult');
+        const sizeAEl = document.getElementById('sizeA');
+        const sizeBEl = document.getElementById('sizeB');
+        const gpuTimeEl = document.getElementById('gpuTime');
+        const cpuTimeEl = document.getElementById('cpuTime');
+        const speedupEl = document.getElementById('speedup');
+        const matrixSizeSelect = document.getElementById('matrixSize');
+
+        let size = 4;
+        let matrixA, matrixB;
+
+        function createMatrix(n) {
+            const matrix = [];
+            for (let i = 0; i < n; i++) {
+                matrix[i] = [];
+                for (let j = 0; j < n; j++) {
+                    matrix[i][j] = Math.round((Math.random() * 10 - 5) * 10) / 10;
+                }
+            }
+            return matrix;
+        }
+
+        function formatMatrix(matrix) {
+            return matrix.map(row => 
+                '[' + row.map(v => v.toFixed(1).padStart(5)).join(', ') + ']'
+            ).join('\n');
+        }
+
+        function cpuMatrixMultiply(a, b) {
+            const n = a.length;
+            const result = [];
+            for (let i = 0; i < n; i++) {
+                result[i] = [];
+                for (let j = 0; j < n; j++) {
+                    let sum = 0;
+                    for (let k = 0; k < n; k++) {
+                        sum += a[i][k] * b[k][j];
+                    }
+                    result[i][j] = sum;
+                }
+            }
+            return result;
+        }
+
+        function flattenMatrix(matrix) {
+            return matrix.flat();
+        }
+
+        function unflattenMatrix(array, n) {
+            const matrix = [];
+            for (let i = 0; i < n; i++) {
+                matrix[i] = array.slice(i * n, (i + 1) * n);
+            }
+            return matrix;
+        }
+
+        matrixSizeSelect.addEventListener('change', (e) => {
+            size = parseInt(e.target.value);
+            sizeAEl.textContent = `${size}x${size}`;
+            sizeBEl.textContent = `${size}x${size}`;
+            generateMatrices();
+        });
+
+        document.getElementById('randomBtn').addEventListener('click', generateMatrices);
+
+        function generateMatrices() {
+            matrixA = createMatrix(size);
+            matrixB = createMatrix(size);
+            matrixAEl.textContent = formatMatrix(matrixA);
+            matrixBEl.textContent = formatMatrix(matrixB);
+            matrixResultEl.textContent = '?';
+        }
+
+        async function init() {
+            if (!navigator.gpu) {
+                alert('WebGPU not supported');
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            const device = await adapter.requestDevice();
+
+            // Compute shader for matrix multiplication
+            const shaderCode = `
+                @group(0) @binding(0)
+                var<storage, read> matrixA: array<f32>;
+                
+                @group(0) @binding(1)
+                var<storage, read> matrixB: array<f32>;
+                
+                @group(0) @binding(2)
+                var<storage, read_write> result: array<f32>;
+                
+                @group(0) @binding(3)
+                var<uniform> params: vec3u;
+                
+                @compute @workgroup_size(8, 8)
+                fn main(
+                    @builtin(global_invocation_id) global_id: vec3u,
+                    @builtin(local_invocation_id) local_id: vec3u
+                ) {
+                    let row = global_id.y;
+                    let col = global_id.x;
+                    let n = params.x;
+                    
+                    if (row < n && col < n) {
+                        var sum = 0.0;
+                        for (var k: u32 = 0; k < n; k = k + 1) {
+                            let a_val = matrixA[row * n + k];
+                            let b_val = matrixB[k * n + col];
+                            sum = sum + a_val * b_val;
+                        }
+                        result[row * n + col] = sum;
+                    }
+                }
+            `;
+
+            const shader = device.createShaderModule({ code: shaderCode });
+
+            const pipeline = device.createComputePipeline({
+                layout: 'auto',
+                compute: { module: shader, entryPoint: 'main' }
+            });
+
+            document.getElementById('computeBtn').addEventListener('click', async () => {
+                const flatA = new Float32Array(flattenMatrix(matrixA));
+                const flatB = new Float32Array(flattenMatrix(matrixB));
+
+                // GPU computation
+                const gpuStart = performance.now();
+
+                const bufferA = device.createBuffer({
+                    size: flatA.byteLength,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                    mappedAtCreation: true
+                });
+                new Float32Array(bufferA.getMappedRange()).set(flatA);
+                bufferA.unmap();
+
+                const bufferB = device.createBuffer({
+                    size: flatB.byteLength,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                    mappedAtCreation: true
+                });
+                new Float32Array(bufferB.getMappedRange()).set(flatB);
+                bufferB.unmap();
+
+                const resultBuffer = device.createBuffer({
+                    size: flatA.byteLength,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+                });
+
+                const readBuffer = device.createBuffer({
+                    size: flatA.byteLength,
+                    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+                });
+
+                const paramsBuffer = device.createBuffer({
+                    size: 12,
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                    mappedAtCreation: true
+                });
+                new Uint32Array(paramsBuffer.getMappedRange()).set([size, size, 0]);
+                paramsBuffer.unmap();
+
+                const bindGroup = device.createBindGroup({
+                    layout: pipeline.getBindGroupLayout(0),
+                    entries: [
+                        { binding: 0, resource: { buffer: bufferA } },
+                        { binding: 1, resource: { buffer: bufferB } },
+                        { binding: 2, resource: { buffer: resultBuffer } },
+                        { binding: 3, resource: { buffer: paramsBuffer } }
+                    ]
+                });
+
+                const commandEncoder = device.createCommandEncoder();
+                const passEncoder = commandEncoder.beginComputePass();
+                passEncoder.setPipeline(pipeline);
+                passEncoder.setBindGroup(0, bindGroup);
+                passEncoder.dispatchWorkgroups(Math.ceil(size / 8), Math.ceil(size / 8));
+                passEncoder.end();
+
+                commandEncoder.copyBufferToBuffer(resultBuffer, 0, readBuffer, 0, flatA.byteLength);
+                device.queue.submit([commandEncoder.finish()]);
+
+                await readBuffer.mapAsync(GPUMapMode.READ);
+                const gpuResult = new Float32Array(readBuffer.getMappedRange().slice());
+                readBuffer.unmap();
+
+                const gpuTime = performance.now() - gpuStart;
+
+                // CPU computation
+                const cpuStart = performance.now();
+                const cpuResult = cpuMatrixMultiply(matrixA, matrixB);
+                const cpuTime = performance.now() - cpuStart;
+
+                // Display results
+                const gpuMatrix = unflattenMatrix(Array.from(gpuResult), size);
+                matrixResultEl.textContent = formatMatrix(gpuMatrix);
+                gpuTimeEl.textContent = gpuTime.toFixed(3);
+                cpuTimeEl.textContent = cpuTime.toFixed(3);
+                
+                const speedup = cpuTime / gpuTime;
+                speedupEl.textContent = speedup.toFixed(2);
+                speedupEl.style.color = speedup > 1 ? '#00ff88' : '#ffaa00';
+            });
+
+            generateMatrices();
+        }
+
+        init();
+    </script>
+</body>
+</html>

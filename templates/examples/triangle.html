@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic Triangle - WebGPU Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Overview</a>
+        
+        <div class="demo-container">
+            <h1>🔺 Basic Triangle</h1>
+            
+            <div class="demo-info">
+                <p>This example demonstrates the fundamentals of WebGPU rendering:</p>
+                <ul style="text-align: left; display: inline-block; margin-top: 0.5rem;">
+                    <li><strong>Vertex Buffer:</strong> Stores vertex positions and colors</li>
+                    <li><strong>Vertex Shader:</strong> Processes each vertex position</li>
+                    <li><strong>Fragment Shader:</strong> Determines pixel colors</li>
+                    <li><strong>Pipeline:</strong> Configures how GPU renders graphics</li>
+                </ul>
+            </div>
+
+            <canvas id="canvas" width="600" height="400"></canvas>
+            
+            <div class="controls">
+                <button id="rotateBtn">Toggle Rotation</button>
+                <button id="colorBtn">Change Colors</button>
+            </div>
+
+            <div class="stats">
+                <span>FPS: <span id="fps">0</span></span>
+                <span>Vertices: 3</span>
+            </div>
+        </div>
+
+        <section>
+            <h2>How It Works</h2>
+            <ol style="margin-left: 1.5rem; line-height: 2;">
+                <li>WebGPU device and context are initialized</li>
+                <li>Vertex data (positions & colors) is uploaded to GPU buffer</li>
+                <li>WGSL shaders define vertex transformation and coloring</li>
+                <li>Render pipeline connects shaders to output</li>
+                <li>Command encoder creates draw commands</li>
+                <li>GPU executes commands and renders to canvas</li>
+            </ol>
+        </section>
+    </div>
+
+    <script type="module">
+        const canvas = document.getElementById('canvas');
+        const fpsEl = document.getElementById('fps');
+        
+        let rotating = false;
+        let rotation = 0;
+        let colorSet = 0;
+        let frameCount = 0;
+        let lastTime = performance.now();
+
+        const colorSets = [
+            [[1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1]],
+            [[1, 1, 0, 1], [1, 0, 1, 1], [0, 1, 1, 1]],
+            [[1, 0.5, 0, 1], [0, 1, 0.5, 1], [0.5, 0, 1, 1]]
+        ];
+
+        async function init() {
+            if (!navigator.gpu) {
+                alert('WebGPU not supported');
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            const device = await adapter.requestDevice();
+            const context = canvas.getContext('webgpu');
+            const format = navigator.gpu.getPreferredCanvasFormat();
+
+            context.configure({
+                device,
+                format,
+                alphaMode: 'premultiplied'
+            });
+
+            // Vertex data: position (x, y) and color (r, g, b, a)
+            const vertices = new Float32Array([
+                0, 0.5, ...colorSets[0][0],
+                -0.5, -0.5, ...colorSets[0][1],
+                0.5, -0.5, ...colorSets[0][2]
+            ]);
+
+            const vertexBuffer = device.createBuffer({
+                size: vertices.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
+            vertexBuffer.unmap();
+
+            const shaderCode = `
+                @vertex
+                fn vs_main(
+                    @location(0) position: vec2f,
+                    @location(1) color: vec4f
+                ) -> @builtin(position) vec4f {
+                    return vec4f(position, 0.0, 1.0);
+                }
+
+                @fragment
+                fn fs_main(@location(0) color: vec4f) -> @location(0) vec4f {
+                    return color;
+                }
+            `;
+
+            const shader = device.createShaderModule({ code: shaderCode });
+
+            const pipeline = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: {
+                    module: shader,
+                    entryPoint: 'vs_main',
+                    buffers: [{
+                        arrayStride: 6 * 4,
+                        attributes: [
+                            { shaderLocation: 0, offset: 0, format: 'float32x2' },
+                            { shaderLocation: 1, offset: 8, format: 'float32x4' }
+                        ]
+                    }]
+                },
+                fragment: {
+                    module: shader,
+                    entryPoint: 'fs_main',
+                    targets: [{ format }]
+                },
+                primitive: { topology: 'triangle-list' }
+            });
+
+            function render() {
+                const commandEncoder = device.createCommandEncoder();
+                const textureView = context.getCurrentTexture().createView();
+
+                const renderPass = commandEncoder.beginRenderPass({
+                    colorAttachments: [{
+                        view: textureView,
+                        clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1 },
+                        loadOp: 'clear',
+                        storeOp: 'store'
+                    }]
+                });
+
+                renderPass.setPipeline(pipeline);
+                renderPass.setVertexBuffer(0, vertexBuffer);
+                renderPass.draw(3);
+                renderPass.end();
+
+                device.queue.submit([commandEncoder.finish()]);
+
+                // FPS calculation
+                frameCount++;
+                const now = performance.now();
+                if (now - lastTime >= 1000) {
+                    fpsEl.textContent = frameCount;
+                    frameCount = 0;
+                    lastTime = now;
+                }
+
+                requestAnimationFrame(render);
+            }
+
+            render();
+
+            // Controls
+            document.getElementById('rotateBtn').addEventListener('click', () => {
+                rotating = !rotating;
+            });
+
+            document.getElementById('colorBtn').addEventListener('click', () => {
+                colorSet = (colorSet + 1) % colorSets.length;
+                const newVertices = new Float32Array([
+                    0, 0.5, ...colorSets[colorSet][0],
+                    -0.5, -0.5, ...colorSets[colorSet][1],
+                    0.5, -0.5, ...colorSets[colorSet][2]
+                ]);
+                device.queue.writeBuffer(vertexBuffer, 0, newVertices);
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>

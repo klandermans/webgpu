@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compute Shader - WebGPU Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Overview</a>
+        
+        <div class="demo-container">
+            <h1>⚡ Compute Shader</h1>
+            
+            <div class="demo-info">
+                <p>Compute shaders enable general-purpose GPU computation (GPGPU):</p>
+                <ul style="text-align: left; display: inline-block; margin-top: 0.5rem;">
+                    <li><strong>Parallel Processing:</strong> Thousands of threads run simultaneously</li>
+                    <li><strong>Storage Buffers:</strong> Read/write data from GPU</li>
+                    <li><strong>Workgroups:</strong> Organize threads for efficient execution</li>
+                    <li><strong>Use Cases:</strong> Physics, ML, cryptography, data processing</li>
+                </ul>
+            </div>
+
+            <canvas id="canvas" width="600" height="400"></canvas>
+            
+            <div class="controls">
+                <button id="computeBtn">Run Computation</button>
+                <label>
+                    Work Size: <input type="range" id="workSize" min="100" max="10000" value="1000">
+                    <span id="workSizeVal">1000</span>
+                </label>
+            </div>
+
+            <div class="stats">
+                <span>Elements: <span id="elements">1000</span></span>
+                <span>Time: <span id="computeTime">0</span>ms</span>
+                <span>GPU: <span id="gpuResult">-</span></span>
+            </div>
+        </div>
+
+        <section>
+            <h2>How Compute Shaders Work</h2>
+            <ol style="margin-left: 1.5rem; line-height: 2;">
+                <li>Data is uploaded to storage buffers (read/write access)</li>
+                <li>Compute pipeline is configured with compute shader</li>
+                <li>Dispatch command launches parallel threads</li>
+                <li>Each thread processes one or more data elements</li>
+                <li>Results are read back from GPU buffers</li>
+                <li>Perfect for: simulations, image processing, ML inference</li>
+            </ol>
+        </section>
+    </div>
+
+    <script type="module">
+        const canvas = document.getElementById('canvas');
+        const workSizeInput = document.getElementById('workSize');
+        const workSizeVal = document.getElementById('workSizeVal');
+        const elementsEl = document.getElementById('elements');
+        const computeTimeEl = document.getElementById('computeTime');
+        const gpuResultEl = document.getElementById('gpuResult');
+
+        let device, pipeline, bindGroup;
+        let resultBuffer, inputData, resultData;
+        let workSize = 1000;
+
+        workSizeInput.addEventListener('input', (e) => {
+            workSize = parseInt(e.target.value);
+            workSizeVal.textContent = workSize;
+            elementsEl.textContent = workSize;
+        });
+
+        async function init() {
+            if (!navigator.gpu) {
+                alert('WebGPU not supported');
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            device = await adapter.requestDevice();
+            const context = canvas.getContext('webgpu');
+            const format = navigator.gpu.getPreferredCanvasFormat();
+
+            context.configure({ device, format });
+
+            // Compute shader: square each number and sum
+            const shaderCode = `
+                @group(0) @binding(0)
+                var<storage, read> input: array<f32>;
+                
+                @group(0) @binding(1)
+                var<storage, read_write> output: array<f32>;
+                
+                @group(0) @binding(2)
+                var<uniform> config: vec2u;
+                
+                @compute @workgroup_size(64)
+                fn main(@builtin(global_invocation_id) id: vec3u) {
+                    let idx = id.x;
+                    let size = config.x;
+                    
+                    if (idx < size) {
+                        let value = input[idx];
+                        output[idx] = value * value;
+                    }
+                }
+            `;
+
+            const shader = device.createShaderModule({ code: shaderCode });
+
+            pipeline = device.createComputePipeline({
+                layout: 'auto',
+                compute: { module: shader, entryPoint: 'main' }
+            });
+
+            // Visualization
+            renderVisualization();
+        }
+
+        async function runCompute() {
+            if (!device) return;
+
+            const startTime = performance.now();
+
+            // Create input data
+            inputData = new Float32Array(workSize);
+            for (let i = 0; i < workSize; i++) {
+                inputData[i] = Math.random() * 2 - 1;
+            }
+
+            // Create buffers
+            const inputBuffer = device.createBuffer({
+                size: inputData.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Float32Array(inputBuffer.getMappedRange()).set(inputData);
+            inputBuffer.unmap();
+
+            resultBuffer = device.createBuffer({
+                size: inputData.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+            });
+
+            const readBuffer = device.createBuffer({
+                size: inputData.byteLength,
+                usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+            });
+
+            const configBuffer = device.createBuffer({
+                size: 8,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Uint32Array(configBuffer.getMappedRange()).set([workSize, 0]);
+            configBuffer.unmap();
+
+            bindGroup = device.createBindGroup({
+                layout: pipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: inputBuffer } },
+                    { binding: 1, resource: { buffer: resultBuffer } },
+                    { binding: 2, resource: { buffer: configBuffer } }
+                ]
+            });
+
+            const commandEncoder = device.createCommandEncoder();
+            const passEncoder = commandEncoder.beginComputePass();
+            passEncoder.setPipeline(pipeline);
+            passEncoder.setBindGroup(0, bindGroup);
+            passEncoder.dispatchWorkgroups(Math.ceil(workSize / 64));
+            passEncoder.end();
+
+            commandEncoder.copyBufferToBuffer(resultBuffer, 0, readBuffer, 0, inputData.byteLength);
+            device.queue.submit([commandEncoder.finish()]);
+
+            await readBuffer.mapAsync(GPUMapMode.READ);
+            resultData = new Float32Array(readBuffer.getMappedRange().slice());
+            readBuffer.unmap();
+
+            const endTime = performance.now();
+            computeTimeEl.textContent = (endTime - startTime).toFixed(2);
+
+            // Calculate sum of squares
+            let sum = 0;
+            for (let i = 0; i < Math.min(100, resultData.length); i++) {
+                sum += resultData[i];
+            }
+            gpuResultEl.textContent = sum.toFixed(4) + ' (first 100)';
+
+            renderVisualization();
+        }
+
+        function renderVisualization() {
+            const context = canvas.getContext('webgpu');
+            const textureView = context.getCurrentTexture().createView();
+
+            const shaderCode = `
+                @vertex
+                fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+                    var positions = array<vec2f, 6>(
+                        vec2f(-1, -1), vec2f(1, -1), vec2f(-1, 1),
+                        vec2f(-1, 1), vec2f(1, -1), vec2f(1, 1)
+                    );
+                    return vec4f(positions[vi], 0, 1);
+                }
+
+                @fragment
+                fn fs_main() -> @location(0) vec4f {
+                    return vec4f(0, 0.8, 1, 1);
+                }
+            `;
+
+            if (!device) return;
+
+            const shader = device.createShaderModule({ code: shaderCode });
+            const pipeline = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: { module: shader, entryPoint: 'vs_main' },
+                fragment: { module: shader, entryPoint: 'fs_main', targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }] },
+                primitive: { topology: 'triangle-list' }
+            });
+
+            const commandEncoder = device.createCommandEncoder();
+            const renderPass = commandEncoder.beginRenderPass({
+                colorAttachments: [{
+                    view: textureView,
+                    clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1 },
+                    loadOp: 'clear',
+                    storeOp: 'store'
+                }]
+            });
+            renderPass.setPipeline(pipeline);
+            renderPass.draw(6);
+            renderPass.end();
+            device.queue.submit([commandEncoder.finish()]);
+        }
+
+        document.getElementById('computeBtn').addEventListener('click', runCompute);
+        init();
+    </script>
+</body>
+</html>

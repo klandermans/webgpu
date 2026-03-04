@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGPU Use Cases Demo</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 WebGPU Use Cases</h1>
+            <p class="subtitle">Discover what you can do with WebGPU - Next-generation graphics and compute for the web</p>
+        </header>
+
+        <section class="intro">
+            <h2>What is WebGPU?</h2>
+            <p>WebGPU is a modern web API that provides access to GPU capabilities for both graphics rendering and general-purpose computation. Unlike WebGL, WebGPU offers:</p>
+            <ul>
+                <li>✅ Better performance and efficiency</li>
+                <li>✅ Compute shaders for parallel processing</li>
+                <li>✅ Modern GPU features (ray tracing, mesh shaders)</li>
+                <li>✅ Lower-level access to GPU hardware</li>
+            </ul>
+        </section>
+
+        <section class="examples">
+            <h2>Interactive Examples</h2>
+            <div class="example-grid">
+                <div class="example-card" data-example="triangle">
+                    <div class="card-icon">🔺</div>
+                    <h3>Basic Triangle</h3>
+                    <p>Render a simple colored triangle using WebGPU</p>
+                    <span class="difficulty beginner">Beginner</span>
+                    <a href="templates/examples/triangle.html" class="btn">Try Demo</a>
+                </div>
+
+                <div class="example-card" data-example="compute">
+                    <div class="card-icon">⚡</div>
+                    <h3>Compute Shader</h3>
+                    <p>Use compute shaders for parallel calculations</p>
+                    <span class="difficulty intermediate">Intermediate</span>
+                    <a href="templates/examples/compute.html" class="btn">Try Demo</a>
+                </div>
+
+                <div class="example-card" data-example="particles">
+                    <div class="card-icon">✨</div>
+                    <h3>Particle System</h3>
+                    <p>Simulate thousands of particles with GPU acceleration</p>
+                    <span class="difficulty intermediate">Intermediate</span>
+                    <a href="templates/examples/particles.html" class="btn">Try Demo</a>
+                </div>
+
+                <div class="example-card" data-example="image-filter">
+                    <div class="card-icon">🎨</div>
+                    <h3>Image Filter</h3>
+                    <p>Apply real-time image filters using fragment shaders</p>
+                    <span class="difficulty beginner">Beginner</span>
+                    <a href="templates/examples/image-filter.html" class="btn">Try Demo</a>
+                </div>
+
+                <div class="example-card" data-example="matrix-math">
+                    <div class="card-icon">🔢</div>
+                    <h3>Matrix Multiplication</h3>
+                    <p>Accelerate matrix operations with compute shaders</p>
+                    <span class="difficulty advanced">Advanced</span>
+                    <a href="templates/examples/matrix-math.html" class="btn">Try Demo</a>
+                </div>
+
+                <div class="example-card" data-example="llm-inference">
+                    <div class="card-icon">🤖</div>
+                    <h3>LLM Inference</h3>
+                    <p>Run neural network inference for language models on GPU</p>
+                    <span class="difficulty advanced">Advanced</span>
+                    <a href="templates/examples/llm-inference.html" class="btn">Try Demo</a>
+                </div>
+
+                <div class="example-card" data-example="qwen-chat">
+                    <div class="card-icon">💬</div>
+                    <h3>Qwen Chat</h3>
+                    <p>Full chat interface with Qwen LLM running entirely in your browser</p>
+                    <span class="difficulty advanced">Advanced</span>
+                    <a href="templates/examples/qwen-chat.html" class="btn">Try Demo</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="use-cases">
+            <h2>Real-World Applications</h2>
+            <div class="use-case-list">
+                <div class="use-case">
+                    <h3>🎮 Gaming</h3>
+                    <p>3D graphics, physics simulations, particle effects</p>
+                </div>
+                <div class="use-case">
+                    <h3>📊 Data Visualization</h3>
+                    <p>Large datasets, scientific visualizations, charts</p>
+                </div>
+                <div class="use-case">
+                    <h3>🤖 Machine Learning</h3>
+                    <p>Neural network inference, tensor operations</p>
+                </div>
+                <div class="use-case">
+                    <h3>🎬 Video Processing</h3>
+                    <p>Real-time filters, encoding/decoding, effects</p>
+                </div>
+                <div class="use-case">
+                    <h3>🔬 Scientific Computing</h3>
+                    <p>Simulations, modeling, computational physics</p>
+                </div>
+                <div class="use-case">
+                    <h3>📸 Image Processing</h3>
+                    <p>Filters, transformations, computer vision</p>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>Built with Flask & WebGPU | Learn more at <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API" target="_blank">MDN WebGPU</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // Check WebGPU support
+        if (!navigator.gpu) {
+            document.body.classList.add('no-webgpu');
+            alert('WebGPU is not supported in your browser. Please use Chrome 113+ or Edge 113+');
+        }
+    </script>
+</body>
+</html>

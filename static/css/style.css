@@ -1,0 +1,254 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #eee;
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 2rem 0;
+}
+
+header h1 {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(90deg, #00d9ff, #00ff88);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: #aaa;
+}
+
+section {
+    margin-bottom: 3rem;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+}
+
+h2 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+    color: #00d9ff;
+}
+
+.intro ul {
+    list-style: none;
+    margin-top: 1rem;
+}
+
+.intro li {
+    padding: 0.5rem 0;
+    font-size: 1.1rem;
+}
+
+.example-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.example-card {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 2rem;
+    border-radius: 12px;
+    text-align: center;
+    transition: transform 0.3s, box-shadow 0.3s;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.example-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 217, 255, 0.2);
+}
+
+.card-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.example-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: #fff;
+}
+
+.example-card p {
+    color: #aaa;
+    margin-bottom: 1rem;
+}
+
+.difficulty {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+}
+
+.difficulty.beginner {
+    background: #00ff88;
+    color: #000;
+}
+
+.difficulty.intermediate {
+    background: #ffaa00;
+    color: #000;
+}
+
+.difficulty.advanced {
+    background: #ff4444;
+    color: #fff;
+}
+
+.btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(90deg, #00d9ff, #00ff88);
+    color: #000;
+    text-decoration: none;
+    border-radius: 25px;
+    font-weight: bold;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 20px rgba(0, 217, 255, 0.4);
+}
+
+.use-case-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.use-case {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border-left: 4px solid #00d9ff;
+}
+
+.use-case h3 {
+    margin-bottom: 0.5rem;
+    color: #fff;
+}
+
+.use-case p {
+    color: #aaa;
+    font-size: 0.95rem;
+}
+
+footer {
+    text-align: center;
+    padding: 2rem;
+    color: #666;
+}
+
+footer a {
+    color: #00d9ff;
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+canvas {
+    display: block;
+    margin: 1rem auto;
+    border-radius: 8px;
+    background: #000;
+}
+
+.controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin: 1rem 0;
+    flex-wrap: wrap;
+}
+
+.controls button {
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid #00d9ff;
+    color: #00d9ff;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.controls button:hover {
+    background: #00d9ff;
+    color: #000;
+}
+
+.controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.controls input[type="range"] {
+    width: 150px;
+}
+
+.demo-container {
+    text-align: center;
+}
+
+.demo-info {
+    background: rgba(0, 217, 255, 0.1);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(0, 217, 255, 0.3);
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: #00d9ff;
+    text-decoration: none;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+.no-webgpu .example-card {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.stats {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin: 1rem 0;
+    font-family: monospace;
+    color: #00ff88;
+}

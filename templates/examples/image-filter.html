@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Filter - WebGPU Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Overview</a>
+        
+        <div class="demo-container">
+            <h1>🎨 Image Filter</h1>
+            
+            <div class="demo-info">
+                <p>Real-time image processing with fragment shaders:</p>
+                <ul style="text-align: left; display: inline-block; margin-top: 0.5rem;">
+                    <li><strong>Texture Sampling:</strong> Read pixel data from textures</li>
+                    <li><strong>Fragment Shader:</strong> Process each pixel in parallel</li>
+                    <li><strong>Convolution Filters:</strong> Blur, sharpen, edge detection</li>
+                    <li><strong>Color Operations:</strong> Adjust brightness, contrast, saturation</li>
+                </ul>
+            </div>
+
+            <canvas id="canvas" width="600" height="400"></canvas>
+            
+            <div class="controls">
+                <label>
+                    Filter:
+                    <select id="filterSelect">
+                        <option value="none">None</option>
+                        <option value="grayscale">Grayscale</option>
+                        <option value="sepia">Sepia</option>
+                        <option value="invert">Invert</option>
+                        <option value="blur">Blur</option>
+                        <option value="sharpen">Sharpen</option>
+                        <option value="edge">Edge Detect</option>
+                        <option value="pixelate">Pixelate</option>
+                    </select>
+                </label>
+                <label>
+                    Intensity: <input type="range" id="intensity" min="0" max="100" value="50">
+                    <span id="intensityVal">50</span>
+                </label>
+            </div>
+
+            <div class="stats">
+                <span>Resolution: 600x400</span>
+                <span>FPS: <span id="fps">0</span></span>
+            </div>
+        </div>
+
+        <section>
+            <h2>How Image Filters Work</h2>
+            <p>Fragment shaders process pixels in parallel on the GPU:</p>
+            <ul style="margin-left: 1.5rem; line-height: 2;">
+                <li><strong>Point Operations:</strong> Modify each pixel independently (brightness, invert)</li>
+                <li><strong>Convolution:</strong> Use neighboring pixels (blur, sharpen, edge detect)</li>
+                <li><strong>Color Space:</strong> Convert between RGB, HSL, etc.</li>
+                <li><strong>Performance:</strong> GPU processes millions of pixels simultaneously</li>
+            </ul>
+        </section>
+    </div>
+
+    <script type="module">
+        const canvas = document.getElementById('canvas');
+        const filterSelect = document.getElementById('filterSelect');
+        const intensityInput = document.getElementById('intensity');
+        const intensityVal = document.getElementById('intensityVal');
+        const fpsEl = document.getElementById('fps');
+
+        let currentFilter = 'none';
+        let intensity = 0.5;
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let time = 0;
+
+        intensityInput.addEventListener('input', (e) => {
+            intensity = parseInt(e.target.value) / 100;
+            intensityVal.textContent = e.target.value;
+        });
+
+        filterSelect.addEventListener('change', (e) => {
+            currentFilter = e.target.value;
+        });
+
+        async function init() {
+            if (!navigator.gpu) {
+                alert('WebGPU not supported');
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            const device = await adapter.requestDevice();
+            const context = canvas.getContext('webgpu');
+            const format = navigator.gpu.getPreferredCanvasFormat();
+
+            context.configure({ device, format });
+
+            // Create a procedural texture (animated gradient)
+            const texture = device.createTexture({
+                size: [256, 256],
+                format: 'rgba8unorm',
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+            });
+
+            // Generate initial texture data
+            const textureData = new Uint8Array(256 * 256 * 4);
+            for (let y = 0; y < 256; y++) {
+                for (let x = 0; x < 256; x++) {
+                    const idx = (y * 256 + x) * 4;
+                    textureData[idx] = x * 2 % 256;
+                    textureData[idx + 1] = y * 2 % 256;
+                    textureData[idx + 2] = ((x + y) * 2) % 256;
+                    textureData[idx + 3] = 255;
+                }
+            }
+
+            device.queue.writeTexture(
+                { texture },
+                textureData,
+                { bytesPerRow: 256 * 4 },
+                { width: 256, height: 256 }
+            );
+
+            // Shader with multiple filter options
+            const shaderCode = `
+                @group(0) @binding(0)
+                var mySampler: sampler;
+                
+                @group(0) @binding(1)
+                var myTexture: texture_2d<f32>;
+                
+                @group(0) @binding(2)
+                var<uniform> params: vec3f;
+                
+                fn grayscale(color: vec4f) -> vec4f {
+                    let gray = dot(color.rgb, vec3f(0.299, 0.587, 0.114));
+                    return vec4f(mix(color.rgb, vec3f(gray), params.x));
+                }
+                
+                fn sepia(color: vec4f) -> vec4f {
+                    let sepiaColor = vec3f(
+                        dot(color.rgb, vec3f(0.393, 0.769, 0.189)),
+                        dot(color.rgb, vec3f(0.349, 0.686, 0.168)),
+                        dot(color.rgb, vec3f(0.272, 0.534, 0.131))
+                    );
+                    return vec4f(mix(color.rgb, sepiaColor, params.x));
+                }
+                
+                fn invert(color: vec4f) -> vec4f {
+                    return vec4f(mix(color.rgb, 1.0 - color.rgb, params.x), color.a);
+                }
+                
+                fn pixelate(color: vec4f, uv: vec2f) -> vec4f {
+                    let pixelSize = 0.1 * params.x + 0.01;
+                    let pixelatedUV = floor(uv / pixelSize) * pixelSize;
+                    return textureSample(myTexture, mySampler, pixelatedUV);
+                }
+                
+                @vertex
+                fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+                    var positions = array<vec2f, 6>(
+                        vec2f(-1, -1), vec2f(1, -1), vec2f(-1, 1),
+                        vec2f(-1, 1), vec2f(1, -1), vec2f(1, 1)
+                    );
+                    return vec4f(positions[vi], 0, 1);
+                }
+
+                @fragment
+                fn fs_main(@builtin(vertex_index) vi: u32) -> @location(0) vec4f {
+                    var uv = vec2f(f32(vi) / 3.0, 0.5);
+                    if (vi < 3) {
+                        uv = vec2f(f32(vi) / 2.0, 0.0);
+                    } else {
+                        uv = vec2f(f32(vi - 3) / 2.0, 1.0);
+                    }
+                    
+                    // Calculate UV from vertex
+                    let positions = array<vec2f, 6>(
+                        vec2f(-1, -1), vec2f(1, -1), vec2f(-1, 1),
+                        vec2f(-1, 1), vec2f(1, -1), vec2f(1, 1)
+                    );
+                    uv = positions[vi] * 0.5 + 0.5;
+                    
+                    var color = textureSample(myTexture, mySampler, uv);
+                    
+                    select params.z {
+                        case 1.0: { color = grayscale(color); }
+                        case 2.0: { color = sepia(color); }
+                        case 3.0: { color = invert(color); }
+                        case 4.0: { 
+                            // Blur (simplified)
+                            let offset = 0.01;
+                            color = (
+                                textureSample(myTexture, mySampler, uv) +
+                                textureSample(myTexture, mySampler, uv + vec2f(offset, 0)) +
+                                textureSample(myTexture, mySampler, uv - vec2f(offset, 0)) +
+                                textureSample(myTexture, mySampler, uv + vec2f(0, offset)) +
+                                textureSample(myTexture, mySampler, uv - vec2f(0, offset))
+                            ) / 5.0;
+                        }
+                        case 5.0: {
+                            // Sharpen
+                            let offset = 0.005;
+                            let center = textureSample(myTexture, mySampler, uv);
+                            color = center * 2.0 - (
+                                textureSample(myTexture, mySampler, uv + vec2f(offset, 0)) +
+                                textureSample(myTexture, mySampler, uv - vec2f(offset, 0)) +
+                                textureSample(myTexture, mySampler, uv + vec2f(0, offset)) +
+                                textureSample(myTexture, mySampler, uv - vec2f(0, offset))
+                            ) / 4.0;
+                        }
+                        case 6.0: {
+                            // Edge detect
+                            let offset = 0.01;
+                            color = abs(
+                                textureSample(myTexture, mySampler, uv + vec2f(offset, 0)) -
+                                textureSample(myTexture, mySampler, uv - vec2f(offset, 0))
+                            ) + abs(
+                                textureSample(myTexture, mySampler, uv + vec2f(0, offset)) -
+                                textureSample(myTexture, mySampler, uv - vec2f(0, offset))
+                            );
+                            color.a = 1.0;
+                        }
+                        case 7.0: { color = pixelate(color, uv); }
+                        default: {}
+                    }
+                    
+                    return color;
+                }
+            `;
+
+            const shader = device.createShaderModule({ code: shaderCode });
+
+            const sampler = device.createSampler({
+                magFilter: 'linear',
+                minFilter: 'linear',
+                addressModeU: 'clamp-to-edge',
+                addressModeV: 'clamp-to-edge'
+            });
+
+            const pipeline = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: { module: shader, entryPoint: 'vs_main' },
+                fragment: { module: shader, entryPoint: 'fs_main', targets: [{ format }] },
+                primitive: { topology: 'triangle-list' }
+            });
+
+            function getFilterId(filter) {
+                const filters = { none: 0, grayscale: 1, sepia: 2, invert: 3, blur: 4, sharpen: 5, edge: 6, pixelate: 7 };
+                return filters[filter] || 0;
+            }
+
+            function animate() {
+                time += 0.01;
+
+                // Update texture with animation
+                const textureData = new Uint8Array(256 * 256 * 4);
+                for (let y = 0; y < 256; y++) {
+                    for (let x = 0; x < 256; x++) {
+                        const idx = (y * 256 + x) * 4;
+                        const nx = x / 256 * Math.PI * 4;
+                        const ny = y / 256 * Math.PI * 4;
+                        textureData[idx] = Math.floor(128 + 127 * Math.sin(nx + time));
+                        textureData[idx + 1] = Math.floor(128 + 127 * Math.sin(ny + time * 1.3));
+                        textureData[idx + 2] = Math.floor(128 + 127 * Math.sin((nx + ny) / 2 + time * 0.7));
+                        textureData[idx + 3] = 255;
+                    }
+                }
+
+                device.queue.writeTexture(
+                    { texture },
+                    textureData,
+                    { bytesPerRow: 256 * 4 },
+                    { width: 256, height: 256 }
+                );
+
+                const paramsBuffer = device.createBuffer({
+                    size: 12,
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                    mappedAtCreation: true
+                });
+                new Float32Array(paramsBuffer.getMappedRange()).set([intensity, time, getFilterId(currentFilter)]);
+                paramsBuffer.unmap();
+
+                const bindGroup = device.createBindGroup({
+                    layout: pipeline.getBindGroupLayout(0),
+                    entries: [
+                        { binding: 0, resource: sampler },
+                        { binding: 1, resource: texture.createView() },
+                        { binding: 2, resource: { buffer: paramsBuffer } }
+                    ]
+                });
+
+                const commandEncoder = device.createCommandEncoder();
+                const textureView = context.getCurrentTexture().createView();
+                const renderPass = commandEncoder.beginRenderPass({
+                    colorAttachments: [{
+                        view: textureView,
+                        clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1 },
+                        loadOp: 'clear',
+                        storeOp: 'store'
+                    }]
+                });
+                renderPass.setPipeline(pipeline);
+                renderPass.setBindGroup(0, bindGroup);
+                renderPass.draw(6);
+                renderPass.end();
+                device.queue.submit([commandEncoder.finish()]);
+
+                // FPS
+                frameCount++;
+                const now = performance.now();
+                if (now - lastTime >= 1000) {
+                    fpsEl.textContent = frameCount;
+                    frameCount = 0;
+                    lastTime = now;
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            animate();
+        }
+
+        init();
+    </script>
+</body>
+</html>

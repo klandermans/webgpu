@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Inference - WebGPU Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .network-viz {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 2rem;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+        .layer {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .layer-label {
+            font-size: 0.8rem;
+            color: #00d9ff;
+            text-align: center;
+        }
+        .neuron {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #00ff88, #006633);
+            border: 2px solid #00ff88;
+            transition: all 0.3s;
+        }
+        .neuron.active {
+            background: radial-gradient(circle at 30% 30%, #ffff00, #ff8800);
+            border-color: #ffff00;
+            box-shadow: 0 0 15px #ffff00;
+        }
+        .layer-connections {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            width: 60px;
+            justify-content: center;
+        }
+        .connection {
+            height: 2px;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            opacity: 0.5;
+        }
+        .output-display {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 1.1rem;
+            min-height: 100px;
+            margin: 1rem 0;
+            border: 1px solid #00d9ff;
+        }
+        .output-display .token {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            margin: 0.25rem;
+            background: rgba(0, 217, 255, 0.2);
+            border-radius: 4px;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .token-probs {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        .token-prob {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+        .token-prob span {
+            color: #00ff88;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Overview</a>
+        
+        <div class="demo-container">
+            <h1>🤖 LLM Inference on GPU</h1>
+            
+            <div class="demo-info">
+                <p>WebGPU enables running neural network inference directly in the browser:</p>
+                <ul style="text-align: left; display: inline-block; margin-top: 0.5rem;">
+                    <li><strong>Matrix Operations:</strong> Transformer layers use massive matrix multiplications</li>
+                    <li><strong>Parallel Processing:</strong> GPU computes all neurons in a layer simultaneously</li>
+                    <li><strong>Attention Mechanism:</strong> Compute attention scores in parallel</li>
+                    <li><strong>Real Applications:</strong> Transformers.js, WebLLM, mlc-llm</li>
+                </ul>
+            </div>
+
+            <div class="network-viz">
+                <div class="layer" id="inputLayer">
+                    <div class="layer-label">Input<br>Embedding</div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                </div>
+                
+                <div class="layer-connections">
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                </div>
+                
+                <div class="layer" id="hiddenLayer1">
+                    <div class="layer-label">Attention<br>Layer</div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                </div>
+                
+                <div class="layer-connections">
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                </div>
+                
+                <div class="layer" id="hiddenLayer2">
+                    <div class="layer-label">FFN<br>Layer</div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                </div>
+                
+                <div class="layer-connections">
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                    <div class="connection"></div>
+                </div>
+                
+                <div class="layer" id="outputLayer">
+                    <div class="layer-label">Output<br>Logits</div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                    <div class="neuron"></div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="generateBtn">Generate Text</button>
+                <button id="stepBtn">Step Through</button>
+                <label>
+                    Model Size:
+                    <select id="modelSize">
+                        <option value="small">Small (128 hidden)</option>
+                        <option value="medium" selected>Medium (512 hidden)</option>
+                        <option value="large">Large (2048 hidden)</option>
+                    </select>
+                </label>
+                <label>
+                    Max Tokens: <input type="range" id="maxTokens" min="5" max="50" value="20">
+                    <span id="maxTokensVal">20</span>
+                </label>
+            </div>
+
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+
+            <div class="output-display" id="outputDisplay">
+                <span style="color: #666;">Click "Generate Text" to start inference...</span>
+            </div>
+
+            <div class="token-probs" id="tokenProbs"></div>
+
+            <div class="stats">
+                <span>Layer Time: <span id="layerTime">-</span>ms</span>
+                <span>Tokens/sec: <span id="tokensPerSec">-</span></span>
+                <span>GPU Memory: <span id="gpuMemory">-</span>MB</span>
+            </div>
+        </div>
+
+        <section>
+            <h2>How LLM Inference Works on GPU</h2>
+            <ol style="margin-left: 1.5rem; line-height: 2;">
+                <li><strong>Tokenization:</strong> Input text is converted to token IDs</li>
+                <li><strong>Embedding:</strong> Tokens are mapped to dense vectors</li>
+                <li><strong>Transformer Layers:</strong> Each layer performs:
+                    <ul>
+                        <li>Self-Attention: Compute attention scores between all tokens</li>
+                        <li>Feed-Forward: Two matrix multiplications with activation</li>
+                        <li>LayerNorm & Residual connections</li>
+                    </ul>
+                </li>
+                <li><strong>Output Head:</strong> Final projection to vocabulary size</li>
+                <li><strong>Sampling:</strong> Select next token (greedy, top-k, or nucleus)</li>
+            </ol>
+            <p style="margin-top: 1rem;"><strong>Why GPU?</strong> A single forward pass through a 7B parameter model requires billions of operations. GPU parallelism makes this feasible in real-time.</p>
+        </section>
+
+        <section>
+            <h2>Real-World WebGPU LLM Libraries</h2>
+            <div class="use-case-list">
+                <div class="use-case">
+                    <h3>🧠 Transformers.js</h3>
+                    <p>Run Hugging Face models directly in browser</p>
+                </div>
+                <div class="use-case">
+                    <h3>🌐 WebLLM</h3>
+                    <p>Accelerated LLM inference with WebGPU</p>
+                </div>
+                <div class="use-case">
+                    <h3>⚡ mlc-llm</h3>
+                    <p>Deploy any LLM to web with compilation</p>
+                </div>
+                <div class="use-case">
+                    <h3>🔮 Wllama</h3>
+                    <p>LLaMA models running in browser</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script type="module">
+        const generateBtn = document.getElementById('generateBtn');
+        const stepBtn = document.getElementById('stepBtn');
+        const modelSizeSelect = document.getElementById('modelSize');
+        const maxTokensInput = document.getElementById('maxTokens');
+        const maxTokensVal = document.getElementById('maxTokensVal');
+        const outputDisplay = document.getElementById('outputDisplay');
+        const tokenProbs = document.getElementById('tokenProbs');
+        const progressFill = document.getElementById('progressFill');
+        const layerTimeEl = document.getElementById('layerTime');
+        const tokensPerSecEl = document.getElementById('tokensPerSec');
+        const gpuMemoryEl = document.getElementById('gpuMemory');
+
+        let modelSize = 512;
+        let maxTokens = 20;
+        let isGenerating = false;
+        let currentToken = 0;
+        let startTime = 0;
+
+        // Simple vocabulary for demo
+        const vocabulary = [
+            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+            'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used',
+            'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as',
+            'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between',
+            'I', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who',
+            'whom', 'this', 'that', 'these', 'those', 'am', 'and', 'but', 'if', 'or',
+            'because', 'until', 'while', 'although', 'though', 'once', 'since',
+            'neural', 'network', 'machine', 'learning', 'deep', 'artificial', 'intelligence',
+            'model', 'data', 'training', 'inference', 'GPU', 'compute', 'parallel',
+            'layer', 'attention', 'transformer', 'embedding', 'token', 'vector',
+            'gradient', 'optimization', 'backpropagation', 'activation', 'output'
+        ];
+
+        maxTokensInput.addEventListener('input', (e) => {
+            maxTokens = parseInt(e.target.value);
+            maxTokensVal.textContent = maxTokens;
+        });
+
+        modelSizeSelect.addEventListener('change', (e) => {
+            const sizes = { small: 128, medium: 512, large: 2048 };
+            modelSize = sizes[e.target.value];
+            updateMemoryEstimate();
+        });
+
+        function updateMemoryEstimate() {
+            // Rough estimate: 4 bytes per float * model parameters
+            const params = modelSize * modelSize * 4; // 4 layers approximation
+            const mb = (params * 4 / 1024 / 1024).toFixed(1);
+            gpuMemoryEl.textContent = mb;
+        }
+
+        function animateLayer(layerId, delay = 0) {
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const layer = document.getElementById(layerId);
+                    const neurons = layer.querySelectorAll('.neuron');
+                    neurons.forEach((neuron, i) => {
+                        setTimeout(() => {
+                            neuron.classList.add('active');
+                            setTimeout(() => neuron.classList.remove('active'), 200);
+                        }, i * 50);
+                    });
+                    setTimeout(resolve, 300);
+                }, delay);
+            });
+        }
+
+        async function runInferenceStep() {
+            if (currentToken >= maxTokens) {
+                isGenerating = false;
+                generateBtn.disabled = false;
+                stepBtn.disabled = false;
+                return;
+            }
+
+            const layerStart = performance.now();
+
+            // Animate forward pass through layers
+            await animateLayer('inputLayer', 0);
+            await animateLayer('hiddenLayer1', 100);
+            await animateLayer('hiddenLayer2', 200);
+            await animateLayer('outputLayer', 300);
+
+            const layerTime = performance.now() - layerStart;
+            layerTimeEl.textContent = layerTime.toFixed(2);
+
+            // Simulate token selection (in real implementation, this would be GPU compute)
+            const nextToken = vocabulary[Math.floor(Math.random() * vocabulary.length)];
+            const probability = (Math.random() * 0.8 + 0.2).toFixed(3);
+
+            // Update output
+            if (currentToken === 0) {
+                outputDisplay.innerHTML = '';
+            }
+            const tokenSpan = document.createElement('span');
+            tokenSpan.className = 'token';
+            tokenSpan.textContent = nextToken + ' ';
+            outputDisplay.appendChild(tokenSpan);
+
+            // Update token probabilities
+            const probs = [];
+            for (let i = 0; i < 4; i++) {
+                const t = vocabulary[Math.floor(Math.random() * vocabulary.length)];
+                const p = (Math.random() * 0.3).toFixed(3);
+                probs.push({ token: t, prob: p });
+            }
+            probs.sort((a, b) => b.prob - a.prob);
+            
+            tokenProbs.innerHTML = probs.map(p => 
+                `<div class="token-prob">${p.token}: <span>${p.prob}</span></div>`
+            ).join('');
+
+            currentToken++;
+            progressFill.style.width = `${(currentToken / maxTokens) * 100}%`;
+
+            const elapsed = (performance.now() - startTime) / 1000;
+            tokensPerSecEl.textContent = (currentToken / elapsed).toFixed(2);
+
+            if (currentToken < maxTokens && isGenerating) {
+                setTimeout(runInferenceStep, 100);
+            } else if (currentToken >= maxTokens) {
+                isGenerating = false;
+                generateBtn.disabled = false;
+                stepBtn.disabled = false;
+            }
+        }
+
+        async function startInference() {
+            if (isGenerating) return;
+            
+            isGenerating = true;
+            currentToken = 0;
+            startTime = performance.now();
+            outputDisplay.innerHTML = '<span style="color: #666;">Generating...</span>';
+            tokenProbs.innerHTML = '';
+            progressFill.style.width = '0%';
+            generateBtn.disabled = true;
+            stepBtn.disabled = true;
+
+            updateMemoryEstimate();
+            runInferenceStep();
+        }
+
+        generateBtn.addEventListener('click', startInference);
+        stepBtn.addEventListener('click', () => {
+            if (!isGenerating && currentToken >= maxTokens) {
+                currentToken = 0;
+                outputDisplay.innerHTML = '';
+            }
+            isGenerating = true;
+            generateBtn.disabled = true;
+            runInferenceStep();
+        });
+
+        updateMemoryEstimate();
+    </script>
+</body>
+</html>

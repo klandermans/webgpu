@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle System - WebGPU Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Overview</a>
+        
+        <div class="demo-container">
+            <h1>✨ Particle System</h1>
+            
+            <div class="demo-info">
+                <p>GPU-accelerated particle simulation demonstrating:</p>
+                <ul style="text-align: left; display: inline-block; margin-top: 0.5rem;">
+                    <li><strong>Storage Buffers:</strong> Store particle positions, velocities, colors</li>
+                    <li><strong>Compute Shaders:</strong> Update physics for all particles in parallel</li>
+                    <li><strong>Render Pipeline:</strong> Draw particles as points or sprites</li>
+                    <li><strong>Real-time Simulation:</strong> Gravity, collision, forces</li>
+                </ul>
+            </div>
+
+            <canvas id="canvas" width="600" height="400"></canvas>
+            
+            <div class="controls">
+                <button id="resetBtn">Reset Particles</button>
+                <label>
+                    Count: <input type="range" id="particleCount" min="100" max="5000" value="1000">
+                    <span id="countVal">1000</span>
+                </label>
+                <label>
+                    Gravity: <input type="range" id="gravity" min="0" max="100" value="30">
+                    <span id="gravityVal">30</span>
+                </label>
+            </div>
+
+            <div class="stats">
+                <span>Particles: <span id="particleStat">1000</span></span>
+                <span>FPS: <span id="fps">0</span></span>
+            </div>
+        </div>
+
+        <section>
+            <h2>Why GPU for Particles?</h2>
+            <p>CPU simulation becomes slow with thousands of particles. GPU excels because:</p>
+            <ul style="margin-left: 1.5rem; line-height: 2;">
+                <li>Each particle update is independent - perfect for parallelization</li>
+                <li>GPU has thousands of cores vs CPU's few cores</li>
+                <li>Memory bandwidth is much higher on GPU</li>
+                <li>Can simulate 10,000+ particles at 60 FPS</li>
+            </ul>
+        </section>
+    </div>
+
+    <script type="module">
+        const canvas = document.getElementById('canvas');
+        const particleCountInput = document.getElementById('particleCount');
+        const countVal = document.getElementById('countVal');
+        const gravityInput = document.getElementById('gravity');
+        const gravityVal = document.getElementById('gravityVal');
+        const particleStat = document.getElementById('particleStat');
+        const fpsEl = document.getElementById('fps');
+
+        let particleCount = 1000;
+        let gravity = 0.3;
+        let device, context, format;
+        let particleBuffer, colorBuffer;
+        let computePipeline, renderPipeline;
+        let bindGroup;
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let time = 0;
+
+        particleCountInput.addEventListener('input', (e) => {
+            particleCount = parseInt(e.target.value);
+            countVal.textContent = particleCount;
+            particleStat.textContent = particleCount;
+            initParticles();
+        });
+
+        gravityInput.addEventListener('input', (e) => {
+            gravity = parseInt(e.target.value) / 100;
+            gravityVal.textContent = gravityInput.value;
+        });
+
+        async function init() {
+            if (!navigator.gpu) {
+                alert('WebGPU not supported');
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            device = await adapter.requestDevice();
+            context = canvas.getContext('webgpu');
+            format = navigator.gpu.getPreferredCanvasFormat();
+
+            context.configure({ device, format });
+
+            // Compute shader for particle physics
+            const computeShaderCode = `
+                @group(0) @binding(0)
+                var<storage, read_write> particles: array<vec2f>;
+                
+                @group(0) @binding(1)
+                var<uniform> params: vec3f;
+                
+                @compute @workgroup_size(64)
+                fn main(@builtin(global_invocation_id) id: vec3u) {
+                    let idx = id.x;
+                    if (idx < arrayLength(&particles)) {
+                        var pos = particles[idx];
+                        pos.y -= params.x; // gravity
+                        pos.x += sin(params.y + f32(idx) * 0.01) * 0.01;
+                        
+                        // Bounce off walls
+                        if (pos.x < -1.0) { pos.x = -1.0; }
+                        if (pos.x > 1.0) { pos.x = 1.0; }
+                        if (pos.y < -1.0) { pos.y = -1.0; pos.x *= 0.9; }
+                        if (pos.y > 1.0) { pos.y = 1.0; }
+                        
+                        particles[idx] = pos;
+                    }
+                }
+            `;
+
+            const computeShader = device.createShaderModule({ code: computeShaderCode });
+            computePipeline = device.createComputePipeline({
+                layout: 'auto',
+                compute: { module: computeShader, entryPoint: 'main' }
+            });
+
+            // Render shader for particles
+            const renderShaderCode = `
+                @group(0) @binding(0)
+                var<storage, read> particles: array<vec2f>;
+                
+                @group(0) @binding(1)
+                var<storage, read> colors: array<vec4f>;
+                
+                @vertex
+                fn vs_main(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
+                    let pos = particles[ii];
+                    let size = 0.02;
+                    
+                    var positions = array<vec2f, 4>(
+                        vec2f(-1, -1), vec2f(1, -1), vec2f(-1, 1),
+                        vec2f(-1, 1), vec2f(1, -1), vec2f(1, 1)
+                    );
+                    
+                    let vertexPos = positions[vi];
+                    let finalPos = pos + vertexPos * size;
+                    return vec4f(finalPos, 0, 1);
+                }
+
+                @fragment
+                fn fs_main(@builtin(instance_index) ii: u32) -> @location(0) vec4f {
+                    return colors[ii];
+                }
+            `;
+
+            const renderShader = device.createShaderModule({ code: renderShaderCode });
+            renderPipeline = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: {
+                    module: renderShader,
+                    entryPoint: 'vs_main',
+                    buffers: []
+                },
+                fragment: {
+                    module: renderShader,
+                    entryPoint: 'fs_main',
+                    targets: [{ format, blend: {
+                        color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
+                        alpha: { srcFactor: 'one', dstFactor: 'zero', operation: 'add' }
+                    }}]
+                },
+                primitive: { topology: 'triangle-list' }
+            });
+
+            initParticles();
+            animate();
+        }
+
+        function initParticles() {
+            if (!device) return;
+
+            // Initialize particle positions
+            const particles = new Float32Array(particleCount * 2);
+            const colors = new Float32Array(particleCount * 4);
+
+            for (let i = 0; i < particleCount; i++) {
+                particles[i * 2] = (Math.random() - 0.5) * 2;
+                particles[i * 2 + 1] = (Math.random() - 0.5) * 2;
+                
+                colors[i * 4] = 0.5 + Math.random() * 0.5;
+                colors[i * 4 + 1] = 0.8 + Math.random() * 0.2;
+                colors[i * 4 + 2] = 1;
+                colors[i * 4 + 3] = 0.8;
+            }
+
+            particleBuffer = device.createBuffer({
+                size: particles.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Float32Array(particleBuffer.getMappedRange()).set(particles);
+            particleBuffer.unmap();
+
+            colorBuffer = device.createBuffer({
+                size: colors.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Float32Array(colorBuffer.getMappedRange()).set(colors);
+            colorBuffer.unmap();
+
+            const paramsBuffer = device.createBuffer({
+                size: 12,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Float32Array(paramsBuffer.getMappedRange()).set([gravity, 0, 0]);
+            paramsBuffer.unmap();
+
+            bindGroup = device.createBindGroup({
+                layout: computePipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: particleBuffer } },
+                    { binding: 1, resource: { buffer: paramsBuffer } }
+                ]
+            });
+        }
+
+        function animate() {
+            time += 0.016;
+
+            // Update params
+            const paramsBuffer = device.createBuffer({
+                size: 12,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Float32Array(paramsBuffer.getMappedRange()).set([gravity, time, 0]);
+            paramsBuffer.unmap();
+
+            bindGroup = device.createBindGroup({
+                layout: computePipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: particleBuffer } },
+                    { binding: 1, resource: { buffer: paramsBuffer } }
+                ]
+            });
+
+            // Compute pass
+            const commandEncoder = device.createCommandEncoder();
+            const computePass = commandEncoder.beginComputePass();
+            computePass.setPipeline(computePipeline);
+            computePass.setBindGroup(0, bindGroup);
+            computePass.dispatchWorkgroups(Math.ceil(particleCount / 64));
+            computePass.end();
+
+            // Render pass
+            const textureView = context.getCurrentTexture().createView();
+            const renderPass = commandEncoder.beginRenderPass({
+                colorAttachments: [{
+                    view: textureView,
+                    clearValue: { r: 0.05, g: 0.05, b: 0.15, a: 1 },
+                    loadOp: 'clear',
+                    storeOp: 'store'
+                }]
+            });
+
+            const renderBindGroup = device.createBindGroup({
+                layout: renderPipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: particleBuffer } },
+                    { binding: 1, resource: { buffer: colorBuffer } }
+                ]
+            });
+
+            renderPass.setPipeline(renderPipeline);
+            renderPass.setBindGroup(0, renderBindGroup);
+            renderPass.draw(6, particleCount);
+            renderPass.end();
+
+            device.queue.submit([commandEncoder.finish()]);
+
+            // FPS
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                fpsEl.textContent = frameCount;
+                frameCount = 0;
+                lastTime = now;
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        document.getElementById('resetBtn').addEventListener('click', initParticles);
+        init();
+    </script>
+</body>
+</html>
