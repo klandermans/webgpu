@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dairy OCR & Health Monitor - WebGPU Demo</title>
+    <link rel="stylesheet" href="../../static/css/style.css">
+    <style>
+        .demo-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 800px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel h3 {
+            color: #00d9ff;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid rgba(0, 217, 255, 0.3);
+        }
+
+        #camera {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #snapshot {
+            display: none;
+        }
+
+        .scan-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(90deg, #238636, #2ea043);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .scan-btn:hover:not(:disabled) {
+            transform: scale(1.02);
+            box-shadow: 0 5px 20px rgba(46, 160, 67, 0.4);
+        }
+
+        .scan-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .scan-btn .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        .scan-btn.scanning .spinner {
+            display: block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .result-box {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            min-height: 120px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            color: #c9d1d9;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .result-box .label {
+            color: #58a6ff;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .result-box .value {
+            color: #7ee787;
+        }
+
+        .result-box .error {
+            color: #ff7b72;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            color: #00ff88;
+            font-family: monospace;
+        }
+
+        .history-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #238636;
+        }
+
+        .history-item .time {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .history-item .id {
+            font-weight: bold;
+            color: #58a6ff;
+        }
+
+        .history-item .health {
+            font-size: 0.85rem;
+            color: #7ee787;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-top: 0.5rem;
+        }
+
+        .status-badge.ready {
+            background: rgba(46, 160, 67, 0.2);
+            color: #2ea043;
+        }
+
+        .status-badge.loading {
+            background: rgba(255, 191, 0, 0.2);
+            color: #ffbf00;
+        }
+
+        .status-badge.error {
+            background: rgba(255, 123, 114, 0.2);
+            color: #ff7b72;
+        }
+
+        .info-box {
+            background: rgba(88, 166, 255, 0.1);
+            border: 1px solid rgba(88, 166, 255, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .info-box h4 {
+            color: #58a6ff;
+            margin-bottom: 0.5rem;
+        }
+
+        .info-box ul {
+            margin-left: 1rem;
+            line-height: 1.8;
+            color: #aaa;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.hidden {
+            display: none;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(88, 166, 255, 0.2);
+            border-top-color: #58a6ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-top: 1.5rem;
+            color: #58a6ff;
+            font-size: 1.1rem;
+        }
+
+        .loading-progress {
+            margin-top: 0.5rem;
+            color: #888;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <a href="../../index.html" class="back-link">← Back to Overview</a>
+        
+        <header>
+            <h1>🐄 Dairy OCR & Health Monitor</h1>
+            <p class="subtitle">AI-powered ear tag recognition and health assessment using WebGPU</p>
+        </header>
+
+        <div class="main-layout">
+            <!-- Left Panel: Camera & Scan -->
+            <div class="panel">
+                <h3>📷 Live Camera Feed</h3>
+                
+                <div class="video-container">
+                    <video id="camera" autoplay playsinline muted></video>
+                    <canvas id="snapshot" width="640" height="480"></canvas>
+                </div>
+
+                <div class="status-bar" style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span id="statusText">Initializing...</span>
+                    <span id="statusBadge" class="status-badge loading">Loading</span>
+                </div>
+
+                <button class="scan-btn" id="scanBtn" disabled>
+                    <span class="spinner"></span>
+                    <span class="btn-text">🔍 Scan Ear Tag & Health</span>
+                </button>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Scans Today</div>
+                        <div class="stat-value" id="scansCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Avg Health</div>
+                        <div class="stat-value" id="avgHealth">-</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Model</div>
+                        <div class="stat-value" style="font-size: 0.9rem;">Moondream2</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Results -->
+            <div class="panel">
+                <h3>📊 Analysis Results</h3>
+                
+                <div class="result-box" id="resultBox">
+                    <div class="label">Latest Scan Result:</div>
+                    <div id="resultText">Waiting for scan...</div>
+                </div>
+
+                <div class="info-box">
+                    <h4>📋 Extracted Information</h4>
+                    <div id="extractedInfo">
+                        <p style="color: #888;">Scan a cow to see extracted information</p>
+                    </div>
+                </div>
+
+                <h3 style="margin-top: 1.5rem;">📜 Scan History</h3>
+                <div class="history-list" id="historyList">
+                    <div style="color: #888; text-align: center; padding: 2rem;">
+                        No scans yet
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="panel">
+            <h2>🔬 How It Works</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
+                <div>
+                    <h4 style="color: #00d9ff; margin-bottom: 0.5rem;">📸 Camera Capture</h4>
+                    <p style="color: #aaa; font-size: 0.9rem; line-height: 1.6;">
+                        Live video feed from your device camera captures the cow's ear tag and physical condition.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="color: #00d9ff; margin-bottom: 0.5rem;">🧠 AI Vision Model</h4>
+                    <p style="color: #aaa; font-size: 0.9rem; line-height: 1.6;">
+                        Moondream2 VLM (Vision Language Model) runs locally via WebGPU for OCR and visual analysis.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="color: #00d9ff; margin-bottom: 0.5rem;">📝 Text Extraction</h4>
+                    <p style="color: #aaa; font-size: 0.9rem; line-height: 1.6;">
+                        Ear tag numbers are extracted using optical character recognition powered by AI.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="color: #00d9ff; margin-bottom: 0.5rem;">🏥 Health Assessment</h4>
+                    <p style="color: #aaa; font-size: 0.9rem; line-height: 1.6;">
+                        Posture, cleanliness, and overall condition are analyzed for health scoring.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" style="margin-top: 1rem;">
+            <h2>⚙️ Technical Details</h2>
+            <ul style="margin-left: 1.5rem; line-height: 2; color: #aaa;">
+                <li><strong>Model:</strong> Moondream2 (1.4B parameters) - Vision Language Model</li>
+                <li><strong>Runtime:</strong> WebGPU + Transformers.js (ONNX backend)</li>
+                <li><strong>Tasks:</strong> Image-to-text, OCR, Visual Question Answering</li>
+                <li><strong>Privacy:</strong> All processing happens locally - no data sent to servers</li>
+                <li><strong>Requirements:</strong> Chrome 113+ or Edge 113+ with WebGPU support</li>
+                <li><strong>Camera:</strong> Rear/environment camera preferred for ear tag capture</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Loading Moondream2 Model...</div>
+        <div class="loading-progress" id="loadingProgress">This may take 1-2 minutes on first load</div>
+    </div>
+
+    <script type="module">
+        // State
+        let vqaPipeline = null;
+        let scanHistory = [];
+        let totalScans = 0;
+        let healthScores = [];
+
+        // DOM Elements
+        const video = document.getElementById('camera');
+        const canvas = document.getElementById('snapshot');
+        const scanBtn = document.getElementById('scanBtn');
+        const statusText = document.getElementById('statusText');
+        const statusBadge = document.getElementById('statusBadge');
+        const resultText = document.getElementById('resultText');
+        const extractedInfo = document.getElementById('extractedInfo');
+        const historyList = document.getElementById('historyList');
+        const scansCount = document.getElementById('scansCount');
+        const avgHealth = document.getElementById('avgHealth');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        const loadingProgress = document.getElementById('loadingProgress');
+
+        // Initialize
+        async function init() {
+            try {
+                // Load Transformers.js
+                await loadTransformersLibrary();
+                
+                // Initialize Moondream2 pipeline
+                statusText.textContent = 'Loading AI model...';
+                
+                vqaPipeline = await window.transformers.pipeline(
+                    'image-text-to-text',
+                    'onnx-community/moondream2',
+                    {
+                        device: 'webgpu',
+                        dtype: 'fp16'
+                    }
+                );
+
+                // Start camera
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                video.srcObject = stream;
+
+                // Ready
+                statusText.textContent = 'System ready - Focus on ear tag';
+                statusBadge.textContent = 'Ready';
+                statusBadge.className = 'status-badge ready';
+                scanBtn.disabled = false;
+
+                hideLoading();
+                logToHistory('System initialized', 'info');
+
+            } catch (err) {
+                console.error('Init error:', err);
+                statusText.textContent = 'Error: ' + err.message;
+                statusBadge.textContent = 'Error';
+                statusBadge.className = 'status-badge error';
+                
+                // Fallback - show demo mode
+                setTimeout(() => {
+                    statusText.textContent = 'Demo mode (WebGPU not available)';
+                    statusBadge.textContent = 'Demo';
+                    statusBadge.className = 'status-badge loading';
+                    scanBtn.disabled = false;
+                    hideLoading();
+                    alert('WebGPU not available. Using demo simulation mode.');
+                }, 2000);
+            }
+        }
+
+        // Load Transformers.js library
+        async function loadTransformersLibrary() {
+            return new Promise((resolve, reject) => {
+                // Check if already loaded
+                if (window.transformers) {
+                    resolve();
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.0/dist/transformers.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // Hide loading
+        function hideLoading() {
+            setTimeout(() => {
+                loadingOverlay.classList.add('hidden');
+            }, 500);
+        }
+
+        // Scan animal
+        async function scanDier() {
+            if (!scanBtn.disabled && vqaPipeline) {
+                // Real scan
+                await performRealScan();
+            } else {
+                // Demo mode
+                await performDemoScan();
+            }
+        }
+
+        // Perform real AI scan
+        async function performRealScan() {
+            scanBtn.disabled = true;
+            scanBtn.classList.add('scanning');
+            resultText.textContent = 'Analyzing image...';
+            
+            try {
+                // Capture frame
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Convert to blob
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+                
+                // Combined prompt for OCR and health assessment
+                const prompt = "Extract the ear tag number (oormerk) and describe the cow's posture and cleanliness. Format: ID: [number] | Status: [description] | Health: [1-10]";
+                
+                // Run inference
+                const output = await vqaPipeline(blob, prompt, { 
+                    max_new_tokens: 150,
+                    temperature: 0.1
+                });
+                
+                const result = output[0]?.generated_text || 'No result';
+                displayResult(result);
+                addToHistory(result);
+                
+            } catch (e) {
+                console.error('Scan error:', e);
+                resultText.innerHTML = '<span class="error">Analysis failed: ' + e.message + '</span>';
+            }
+            
+            scanBtn.classList.remove('scanning');
+            scanBtn.disabled = false;
+        }
+
+        // Demo mode scan (when WebGPU not available)
+        async function performDemoScan() {
+            scanBtn.disabled = true;
+            scanBtn.classList.add('scanning');
+            resultText.textContent = 'Simulating analysis...';
+            
+            // Simulate processing delay
+            await new Promise(r => setTimeout(r, 2000));
+            
+            // Generate realistic demo data
+            const demoIds = ['NL-4829571', 'NL-3927184', 'NL-5738291', 'NL-2847563'];
+            const statuses = [
+                'Standing calmly, clean coat, good posture',
+                'Grazing, slightly dirty hindquarters',
+                'Resting, clean, healthy appearance',
+                'Walking, minor dirt on legs, alert'
+            ];
+            const healthScores = [8, 7, 9, 6];
+            
+            const idx = Math.floor(Math.random() * demoIds.length);
+            const result = `ID: ${demoIds[idx]} | Status: ${statuses[idx]} | Health: ${healthScores[idx]}/10`;
+            
+            displayResult(result);
+            addToHistory(result);
+            
+            scanBtn.classList.remove('scanning');
+            scanBtn.disabled = false;
+        }
+
+        // Display result
+        function displayResult(result) {
+            resultText.innerHTML = '<span class="value">' + result + '</span>';
+            
+            // Parse and display extracted info
+            const idMatch = result.match(/ID:\s*([^\|]+)/);
+            const statusMatch = result.match(/Status:\s*([^\|]+)/);
+            const healthMatch = result.match(/Health:\s*(\d+)/);
+            
+            let infoHtml = '<div style="display: grid; gap: 0.75rem;">';
+            
+            if (idMatch) {
+                infoHtml += `
+                    <div>
+                        <span style="color: #888;">Ear Tag ID:</span>
+                        <span style="color: #58a6ff; font-weight: bold; margin-left: 0.5rem;">${idMatch[1].trim()}</span>
+                    </div>
+                `;
+            }
+            
+            if (statusMatch) {
+                infoHtml += `
+                    <div>
+                        <span style="color: #888;">Condition:</span>
+                        <div style="color: #c9d1d9; margin-top: 0.25rem;">${statusMatch[1].trim()}</div>
+                    </div>
+                `;
+            }
+            
+            if (healthMatch) {
+                const score = parseInt(healthMatch[1]);
+                const color = score >= 8 ? '#7ee787' : score >= 5 ? '#ffbf00' : '#ff7b72';
+                infoHtml += `
+                    <div>
+                        <span style="color: #888;">Health Score:</span>
+                        <span style="color: ${color}; font-size: 1.5rem; font-weight: bold; margin-left: 0.5rem;">${score}/10</span>
+                    </div>
+                `;
+            }
+            
+            infoHtml += '</div>';
+            extractedInfo.innerHTML = infoHtml;
+        }
+
+        // Add to history
+        function addToHistory(result) {
+            totalScans++;
+            scansCount.textContent = totalScans;
+            
+            const idMatch = result.match(/ID:\s*([^\|]+)/);
+            const healthMatch = result.match(/Health:\s*(\d+)/);
+            
+            const health = healthMatch ? parseInt(healthMatch[1]) : 0;
+            if (health > 0) {
+                healthScores.push(health);
+                const avg = (healthScores.reduce((a, b) => a + b, 0) / healthScores.length).toFixed(1);
+                avgHealth.textContent = avg;
+            }
+            
+            scanHistory.unshift({
+                id: idMatch ? idMatch[1].trim() : 'Unknown',
+                result: result,
+                health: health,
+                time: new Date().toLocaleTimeString()
+            });
+            
+            // Keep only last 10
+            if (scanHistory.length > 10) {
+                scanHistory.pop();
+            }
+            
+            updateHistoryList();
+        }
+
+        // Update history list
+        function updateHistoryList() {
+            if (scanHistory.length === 0) {
+                historyList.innerHTML = '<div style="color: #888; text-align: center; padding: 2rem;">No scans yet</div>';
+                return;
+            }
+            
+            historyList.innerHTML = scanHistory.map(item => `
+                <div class="history-item">
+                    <div class="time">${item.time}</div>
+                    <div class="id">🏷️ ${item.id}</div>
+                    <div class="health">Health: ${item.health}/10</div>
+                </div>
+            `).join('');
+        }
+
+        // Log to history (internal)
+        function logToHistory(message, type) {
+            console.log(`[${type}] ${message}`);
+        }
+
+        // Event listeners
+        scanBtn.addEventListener('click', scanDier);
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
